@@ -1,0 +1,33 @@
+{
+  "name": "hoist-git-listener",
+  "version": "1.0.0",
+  "description": "Listen for git pushes from Hoist",
+  "main": "./lib/listener.js",
+  "scripts": {
+    "test": "gulp test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hoist/hoist-git-listener.git"
+  },
+  "author": "Hoist Apps Ltd",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/hoist/hoist-git-listener/issues"
+  },
+  "homepage": "https://github.com/hoist/hoist-git-listener",
+  "devDependencies": {
+    "chai": "^1.9.1",
+    "chai-as-promised": "^4.1.1",
+    "gulp": "^3.8.8",
+    "gulp-istanbul": "^0.3.0",
+    "gulp-istanbul-enforcer": "^1.0.3",
+    "gulp-jshint": "^1.8.4",
+    "gulp-mocha": "^1.1.0",
+    "jshint-growl-reporter": "^0.1.1",
+    "jshint-stylish": "^0.4.0",
+    "run-sequence": "^0.3.6",
+    "sinon": "^1.10.3",
+    "sinon-chai": "^2.5.0"
+  }
+}
