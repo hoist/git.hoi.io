@@ -35,6 +35,7 @@
     "config": "^1.2.4",
     "hoist-model": "git://github.com/hoist/hoist-model",
     "kue": "^0.8.9",
+    "lodash": "^2.4.1",
     "pushover": "^1.3.6"
   }
 }

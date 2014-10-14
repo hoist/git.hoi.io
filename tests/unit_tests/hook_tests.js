@@ -23,13 +23,13 @@ describe('post-receive hook', function () {
     });
     sinon.stub(process, 'exit');
     require('../../lib/hook');
+    console.log.restore();
   });
   after(function () {
     clock.restore();
     process.exit.restore();
     kue.Job.log.restore();
     kue.createQueue.restore();
-    console.log.restore();
   });
   it('should poll for log messages every 500 ms', function () {
     clock.tick(450);
@@ -41,7 +41,7 @@ describe('post-receive hook', function () {
       .to.have.been.called;
   });
   it('should log only new log messages', function () {
-    console.log.reset();
+    sinon.stub(console, 'log');
     //make sure we have at least three calls to retrieve logs
     clock.tick(1500);
     //initial log messages
@@ -57,6 +57,7 @@ describe('post-receive hook', function () {
     call3.args[1](null, log);
     /* jshint -W030 */
     expect(console.log).to.have.been.calledThrice;
+    console.log.restore();
   });
   it('should create a GitPush job', function () {
     expect(stubQueue.create)
@@ -74,6 +75,7 @@ describe('post-receive hook', function () {
   });
   describe('on complete', function () {
     before(function () {
+      sinon.stub(console, 'log');
       kue.Job.log.reset();
       for (var i = 0; i < stubQueue.on.callCount; i++) {
         var call = stubQueue.on.getCall(i);
@@ -83,6 +85,7 @@ describe('post-receive hook', function () {
         }
       }
       kue.Job.log.callArgWith(1, null, []);
+      console.log.restore();
     });
     it('should shutdown kue', function () {
       /* jshint -W030 */
@@ -96,6 +99,7 @@ describe('post-receive hook', function () {
   });
   describe('on failure', function () {
     before(function () {
+      sinon.stub(console, 'log');
       kue.Job.log.reset();
       for (var i = 0; i < stubQueue.on.callCount; i++) {
         var call = stubQueue.on.getCall(i);
@@ -105,6 +109,7 @@ describe('post-receive hook', function () {
         }
       }
       kue.Job.log.callArgWith(1, null, []);
+      console.log.restore();
     });
     it('should shutdown kue', function () {
       /* jshint -W030 */
