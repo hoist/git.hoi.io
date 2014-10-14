@@ -12,7 +12,8 @@ describe('GitActionListener', function () {
   };
   var gitListener;
   before(function () {
-    gitListener = new GitActionListener(repos);
+    gitListener = new GitActionListener();
+    gitListener.bindToRepository(repos);
   });
   it('should subscribe to push events', function () {
     expect(repos.on)
