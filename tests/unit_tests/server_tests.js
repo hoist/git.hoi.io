@@ -8,13 +8,19 @@ describe('server', function () {
   var server = {
     listen: sinon.stub()
   };
+  var _repos;
   before(function () {
-    sinon.stub(GitActionListener.prototype,'bindToRepository');
+    sinon.stub(GitActionListener.prototype, 'bindToRepository', function (repos) {
+      _repos = repos;
+      sinon.stub(_repos, 'handle');
+    });
     sinon.stub(http, 'createServer').returns(server);
     require('../../lib/server');
   });
-  after(function(){
+  after(function () {
     http.createServer.restore();
+    GitActionListener.prototype.bindToRepository.restore();
+    _repos.handle.restore();
   });
   it('creates a server', function () {
     /* jshint -W030 */
@@ -26,9 +32,20 @@ describe('server', function () {
     expect(server.listen)
       .to.have.been.called;
   });
-  it('should bind to repository',function(){
+  it('binds to repository', function () {
     /* jshint -W030 */
     expect(GitActionListener.prototype.bindToRepository)
-    .to.have.been.called;
+      .to.have.been.called;
+  });
+  describe('on request', function () {
+    var req = {};
+    var res = {};
+    before(function () {
+      http.createServer.callArgWith(0, req, res);
+    });
+    it('passes req and res to repos', function () {
+      expect(_repos.handle)
+        .to.have.been.calledWith(req, res);
+    });
   });
 });
