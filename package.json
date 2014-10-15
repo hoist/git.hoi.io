@@ -31,8 +31,10 @@
     "sinon-chai": "^2.5.0"
   },
   "dependencies": {
+    "bluebird": "^2.3.5",
     "chalk": "^0.5.1",
     "config": "^1.2.4",
+    "fs-git": "^0.1.4",
     "hoist-model": "git://github.com/hoist/hoist-model",
     "kue": "^0.8.9",
     "lodash": "^2.4.1",
