@@ -54,7 +54,7 @@ describe('GitDeployer', function () {
         var deployer = new GitDeployer();
         loaded = deployer.loadHoistJson(path.resolve(__dirname, '../fixtures/not_here'));
       });
-      it('loads the content of hoist.json', function () {
+      it('throws git notfound error', function () {
         return expect(loaded)
           .to.be.rejectedWith(errors.git.NotFoundError);
       });
@@ -65,7 +65,7 @@ describe('GitDeployer', function () {
         var deployer = new GitDeployer();
         loaded = deployer.loadHoistJson(path.resolve(__dirname, '../fixtures/repo_sans_hook'));
       });
-      it('loads the content of hoist.json', function () {
+      it('throws git invalid error', function () {
         return expect(loaded)
           .to.be.rejectedWith(errors.git.InvalidError);
       });
