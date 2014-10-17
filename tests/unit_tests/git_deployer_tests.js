@@ -6,6 +6,8 @@ var GitDeployer = require('../../lib/git_deployer');
 var kue = require('kue');
 var BBPromise = require('bluebird');
 var path = require('path');
+var Application = require('hoist-model').Application;
+
 describe('GitDeployer', function () {
   describe('#start', function () {
     var stubQueue = {
@@ -44,6 +46,71 @@ describe('GitDeployer', function () {
             .to.exist;
         });
       });
+    });
+  });
+  describe('#getDetailsFromPath', function () {
+    describe('using a full path', function () {
+      var parsed;
+      before(function () {
+        var deployer = new GitDeployer();
+        parsed = deployer.getDetailsFromPath(path.resolve(__dirname, '../fixtures/repo_with_symlink_hook'));
+      });
+      it('returns organisation', function () {
+        return parsed.then(function (details) {
+          expect(details.organisationName)
+            .to.eql('fixtures');
+        });
+      });
+      it('returns subdomain', function () {
+        return parsed.then(function (details) {
+          expect(details.applicationSubDomain)
+            .to.eql('repo_with_symlink_hook');
+        });
+      });
+    });
+  });
+  describe('#updateConfig', function () {
+    describe('with a valid save', function () {
+      var application = new Application({
+        settings: {
+          dev: {
+            setting: 'old'
+          }
+        }
+      });
+      before(function () {
+        var deployer = new GitDeployer();
+        sinon.stub(deployer, 'getDetailsFromPath').returns(BBPromise.resolve({
+          applicationSubDomain:'subdomain'
+        }));
+        sinon.stub(deployer, 'loadHoistJson').returns(BBPromise.resolve({
+          setting: 'new',
+          sub: {
+            'key': 'true'
+          }
+        }));
+        sinon.stub(Application, 'findOneAsync').returns(BBPromise.resolve(application));
+        sinon.stub(application, 'saveAsync').returns(BBPromise.resolve(null));
+        deployer.updateConfig({
+          path: '/path/to/repo'
+        });
+      });
+      it('saves', function () {
+        /* jshint -W030 */
+        expect(application.saveAsync)
+          .to.have.been.called;
+      });
+      it('loads based on sub domain', function () {
+        expect(Application.findOneAsync)
+          .to.have.been.calledWith({
+            subDomain: 'subdomain'
+          });
+      });
+      after(function(){
+        Application.findOneAsync.restore();
+        application.saveAsync.restore();
+      });
+
     });
   });
   describe('#deploy', function () {
