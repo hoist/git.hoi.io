@@ -6,6 +6,7 @@ var GitDeployer = require('../../lib/git_deployer');
 var kue = require('kue');
 var BBPromise = require('bluebird');
 var path = require('path');
+var errors = require('hoist-errors');
 var Application = require('hoist-model').Application;
 
 describe('GitDeployer', function () {
@@ -47,6 +48,39 @@ describe('GitDeployer', function () {
         });
       });
     });
+    describe('with a git repo that doesn\'t exist', function () {
+      var loaded;
+      before(function () {
+        var deployer = new GitDeployer();
+        loaded = deployer.loadHoistJson(path.resolve(__dirname, '../fixtures/not_here'));
+      });
+      it('loads the content of hoist.json', function () {
+        return expect(loaded)
+          .to.be.rejectedWith(errors.git.NotFoundError);
+      });
+    });
+    describe('with a git repo that doesn\'t have a master branch', function () {
+      var loaded;
+      before(function () {
+        var deployer = new GitDeployer();
+        loaded = deployer.loadHoistJson(path.resolve(__dirname, '../fixtures/repo_sans_hook'));
+      });
+      it('loads the content of hoist.json', function () {
+        return expect(loaded)
+          .to.be.rejectedWith(errors.git.InvalidError);
+      });
+    });
+    describe('with a git repo that doesn\'t contain a hoist.json', function () {
+      var loaded;
+      before(function () {
+        var deployer = new GitDeployer();
+        loaded = deployer.loadHoistJson(path.resolve(__dirname, '../fixtures/repo_with_file_hook'));
+      });
+      it('throws notfound error', function () {
+        return expect(loaded)
+          .to.be.rejectedWith(errors.files.hoistJson.NotFoundError);
+      });
+    });
   });
   describe('#getDetailsFromPath', function () {
     describe('using a full path', function () {
@@ -81,7 +115,7 @@ describe('GitDeployer', function () {
       before(function () {
         var deployer = new GitDeployer();
         sinon.stub(deployer, 'getDetailsFromPath').returns(BBPromise.resolve({
-          applicationSubDomain:'subdomain'
+          applicationSubDomain: 'subdomain'
         }));
         sinon.stub(deployer, 'loadHoistJson').returns(BBPromise.resolve({
           setting: 'new',
@@ -106,7 +140,7 @@ describe('GitDeployer', function () {
             subDomain: 'subdomain'
           });
       });
-      after(function(){
+      after(function () {
         Application.findOneAsync.restore();
         application.saveAsync.restore();
       });
