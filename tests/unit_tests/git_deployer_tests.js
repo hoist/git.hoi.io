@@ -1,12 +1,16 @@
 'use strict';
 require('../bootstrap');
+var moment = require('moment');
 var sinon = require('sinon');
+var fs = require('fs');
 var expect = require('chai').expect;
 var GitDeployer = require('../../lib/git_deployer');
 var kue = require('kue');
 var BBPromise = require('bluebird');
 var path = require('path');
 var errors = require('hoist-errors');
+var config = require('config');
+var rmdirRecursive = require('rmdir-recursive');
 var Application = require('hoist-model').Application;
 
 describe('GitDeployer', function () {
@@ -176,5 +180,38 @@ describe('GitDeployer', function () {
       expect(callback)
         .to.have.been.called;
     });
+  });
+  describe('#checkout', function () {
+    var checkedOut;
+    var clock;
+    before(function () {
+      var deployer = new GitDeployer();
+      config.util.setModuleDefaults('Hoist', {
+        git: {
+          repository: {
+            root: path.resolve(__dirname, '../fixtures/')
+          }
+        },
+        executor: {
+          root: path.resolve(__dirname, '../fixtures/checkouts')
+        }
+      });
+      clock = sinon.useFakeTimers(moment().valueOf());
+      clock.tick(500);
+      checkedOut = deployer.checkout({
+        path: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook')
+      });
+    });
+    after(function (done) {
+      clock.restore();
+      rmdirRecursive(path.resolve(__dirname, '../fixtures/checkouts'), done);
+    });
+    it('creates directory', function () {
+      return checkedOut.then(function () {
+        expect(fs.existsSync(path.resolve(__dirname, '../fixtures/checkouts/fixtures/repo_with_symlink_hook/'+moment().format('X')+'/hoist.json')))
+          .to.eql(true);
+      });
+    });
+
   });
 });
