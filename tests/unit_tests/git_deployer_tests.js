@@ -116,7 +116,9 @@ describe('GitDeployer', function () {
           }
         }
       });
+      var clock;
       before(function () {
+        clock = sinon.useFakeTimers(moment().valueOf());
         var deployer = new GitDeployer();
         sinon.stub(deployer, 'getDetailsFromPath').returns(BBPromise.resolve({
           applicationSubDomain: 'subdomain'
@@ -130,8 +132,18 @@ describe('GitDeployer', function () {
         sinon.stub(Application, 'findOneAsync').returns(BBPromise.resolve(application));
         sinon.stub(application, 'saveAsync').returns(BBPromise.resolve(null));
         deployer.updateConfig({
-          path: '/path/to/repo'
+          log:sinon.stub(),
+          path: '/path/to/repo',
+          timestamp: moment()
         });
+      });
+      it('sets dev settings', function () {
+        expect(application.settings.dev.setting)
+          .to.eql('new');
+      });
+      it('sets deploy timestamp', function () {
+        expect(application.lastDeploy.dev)
+          .to.eql(moment().toDate());
       });
       it('saves', function () {
         /* jshint -W030 */
@@ -145,6 +157,7 @@ describe('GitDeployer', function () {
           });
       });
       after(function () {
+        clock.restore();
         Application.findOneAsync.restore();
         application.saveAsync.restore();
       });
@@ -154,14 +167,23 @@ describe('GitDeployer', function () {
   describe('#deploy', function () {
     var deployer;
     var callback = sinon.stub();
-    var job = {};
+    var job = {
+      log: sinon.stub()
+    };
+    var clock;
     before(function (done) {
+      clock = sinon.useFakeTimers(moment().valueOf());
       deployer = new GitDeployer();
       var p = BBPromise.resolve(null);
       sinon.stub(deployer, 'checkout').returns(p);
       sinon.stub(deployer, 'updateConfig').returns(p);
-      sinon.stub(deployer, 'restartExecutor').returns(p);
       deployer.deploy(job, callback).then(done);
+    });
+    after(function () {
+      clock.restore();
+    });
+    it('adds timestamp', function () {
+      expect(job.timestamp).to.eql(moment());
     });
     it('checks-out the git repository', function () {
       expect(deployer.checkout)
@@ -171,9 +193,10 @@ describe('GitDeployer', function () {
       expect(deployer.updateConfig)
         .to.have.been.calledWith(job);
     });
-    it('starts exectutor process', function () {
-      expect(deployer.restartExecutor)
-        .to.have.been.calledWith(job);
+    it('creates job log', function () {
+      /* jshint -W030 */
+      expect(job.log)
+        .to.have.been.called;
     });
     it('completes', function () {
       /* jshint -W030 */
@@ -197,9 +220,11 @@ describe('GitDeployer', function () {
         }
       });
       clock = sinon.useFakeTimers(moment().valueOf());
-      clock.tick(500);
+
       checkedOut = deployer.checkout({
-        path: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook')
+        path: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook'),
+        timestamp: moment(),
+        log:sinon.stub()
       });
     });
     after(function (done) {
@@ -208,7 +233,7 @@ describe('GitDeployer', function () {
     });
     it('creates directory', function () {
       return checkedOut.then(function () {
-        expect(fs.existsSync(path.resolve(__dirname, '../fixtures/checkouts/fixtures/repo_with_symlink_hook/'+moment().format('X')+'/hoist.json')))
+        expect(fs.existsSync(path.resolve(__dirname, '../fixtures/checkouts/fixtures/repo_with_symlink_hook/' + moment().format('X') + '/hoist.json')))
           .to.eql(true);
       });
     });
