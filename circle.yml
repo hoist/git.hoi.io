@@ -1,0 +1,17 @@
+machine:
+  ruby:
+    version: 2.1.2
+  node:
+    version: v0.10.31
+general:
+  artifacts:
+    - coverage/*
+    - coverage/**/*
+    - log/*.log
+    - npm-debug.log
+deployment:
+  production:
+    branch: master
+    commands:
+      - git submodule add git@github.com:hoist/deploy.git
+      - cd deploy && bundle install && bundle exec cap web_servers deploy
