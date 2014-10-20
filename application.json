@@ -1,0 +1,14 @@
+[{
+  "name": "hoist-git-listener",
+  "script": "./app.js",
+  "cwd": "./",
+  "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
+  "error_file": "/var/log/node/hoist-git-listener.stderr.log",
+  "out_file": "/var/log/node/hoist-git-listener.stdout.log",
+  "instances": "1",
+  "merge_logs": true,
+  "exec_mode": "fork_mode",
+  "env": {
+    "NODE_ENV": "production"
+  }
+}]

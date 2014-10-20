@@ -1,0 +1,15 @@
+{
+  "Hoist": {
+    "kue": {
+      "host": "localhost",
+      "port": 6379,
+      "db": 4
+    },
+    "http": {
+      "port": 7000
+    },
+    "git": {
+      "repositories": "/tmp/repos"
+    }
+  }
+}
