@@ -12,6 +12,7 @@ var errors = require('hoist-errors');
 var config = require('config');
 var rmdirRecursive = require('rmdir-recursive');
 var Application = require('hoist-model').Application;
+var mongoose = require('hoist-model')._mongoose;
 
 describe('GitDeployer', function () {
   describe('#start', function () {
@@ -19,15 +20,20 @@ describe('GitDeployer', function () {
       process: sinon.stub()
     };
     var deployer;
-    before(function () {
+    before(function (done) {
       sinon.stub(kue, 'createQueue').returns(stubQueue);
       deployer = new GitDeployer();
-      deployer.start();
+      sinon.stub(mongoose, 'connect').callsArg(1);
+      deployer.start(done);
     });
     after(function () {
       kue.createQueue.restore();
+      mongoose.connect.restore();
     });
-
+    it('connects to mongo', function () {
+      expect(mongoose.connect)
+        .to.have.been.calledWith('mongodb://localhost/hoist-default');
+    });
     it('listens for GitPush jobs', function () {
       expect(stubQueue.process)
         .to.have.been.calledWith('GitPush');
@@ -36,6 +42,38 @@ describe('GitDeployer', function () {
       expect(stubQueue.process.firstCall.args[2])
         .to.eql(deployer.deploy);
     });
+  });
+  describe('#stop', function () {
+    var stubQueue = {
+      shutdown: sinon.stub().callsArg(0)
+    };
+    var deployer;
+    var originalConnections;
+    before(function (done) {
+      deployer = new GitDeployer();
+      deployer.queue = stubQueue;
+      originalConnections = mongoose.connections;
+      mongoose.connections = [];
+      mongoose.connections.push({
+        readyState: 1
+      });
+      sinon.stub(mongoose, 'disconnect').callsArg(0);
+      deployer.stop(done);
+    });
+    after(function () {
+      mongoose.connections = originalConnections;
+      mongoose.disconnect.restore();
+    });
+    it('shuts down queue', function () {
+      expect(stubQueue.shutdown)
+        .to.have.been.calledWith(sinon.match.func, 5000);
+    });
+    it('disconnects from mongo', function () {
+      /* jshint -W030 */
+      expect(mongoose.disconnect)
+        .to.have.been.called;
+    });
+
   });
   describe('#loadHoistJson', function () {
     describe('with a valid git repo', function () {
@@ -132,7 +170,7 @@ describe('GitDeployer', function () {
         sinon.stub(Application, 'findOneAsync').returns(BBPromise.resolve(application));
         sinon.stub(application, 'saveAsync').returns(BBPromise.resolve(null));
         deployer.updateConfig({
-          log:sinon.stub(),
+          log: sinon.stub(),
           path: '/path/to/repo',
           timestamp: moment()
         });
@@ -224,7 +262,7 @@ describe('GitDeployer', function () {
       checkedOut = deployer.checkout({
         path: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook'),
         timestamp: moment(),
-        log:sinon.stub()
+        log: sinon.stub()
       });
     });
     after(function (done) {

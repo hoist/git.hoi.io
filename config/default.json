@@ -10,6 +10,9 @@
     },
     "git": {
       "repositories": "/tmp/repos"
+    },
+    "mongo":{
+      "db":"mongodb://localhost/hoist-default"
     }
   }
 }
