@@ -1,7 +1,8 @@
 'use strict';
 
 var server = require('./lib/server');
-var deployer = require('./lib/git_deployer');
+var Deployer = require('./lib/git_deployer');
+var deployer = new Deployer();
 process.on('message', function (msg) {
   console.log('got message', msg, msg === 'shutdown');
   if (msg === 'shutdown') {
