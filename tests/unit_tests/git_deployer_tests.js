@@ -171,7 +171,9 @@ describe('GitDeployer', function () {
         sinon.stub(application, 'saveAsync').returns(BBPromise.resolve(null));
         deployer.updateConfig({
           log: sinon.stub(),
-          path: '/path/to/repo',
+          data: {
+            path: '/path/to/repo'
+          },
           timestamp: moment()
         });
       });
@@ -260,7 +262,9 @@ describe('GitDeployer', function () {
       clock = sinon.useFakeTimers(moment().valueOf());
 
       checkedOut = deployer.checkout({
-        path: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook'),
+        data: {
+          path: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook')
+        },
         timestamp: moment(),
         log: sinon.stub()
       });
