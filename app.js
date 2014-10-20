@@ -18,8 +18,14 @@ process.on('message', function (msg) {
     }, 500);
   }
 });
-deployer.start(function () {
-  server.start(function () {
+deployer.start(function (err) {
+  if(err){
+    throw err;
+  }
+  server.start(function (err) {
+    if(err){
+      throw err;
+    }
     console.log('started');
   });
 });
