@@ -12,6 +12,7 @@ var errors = require('hoist-errors');
 var config = require('config');
 var rmdirRecursive = require('rmdir-recursive');
 var Application = require('hoist-model').Application;
+var Organisation = require('hoist-model').Organisation;
 var mongoose = require('hoist-model')._mongoose;
 
 describe('GitDeployer', function () {
@@ -129,17 +130,17 @@ describe('GitDeployer', function () {
       var parsed;
       before(function () {
         var deployer = new GitDeployer();
-        parsed = deployer.getDetailsFromPath(path.resolve(__dirname, '../fixtures/repo_with_symlink_hook'));
+        parsed = deployer.getDetailsFromPath(path.resolve(__dirname, '../fixtures/repo_with_symlink_hook.git'));
       });
       it('returns organisation', function () {
         return parsed.then(function (details) {
-          expect(details.organisationName)
+          expect(details.folderName)
             .to.eql('fixtures');
         });
       });
       it('returns subdomain', function () {
         return parsed.then(function (details) {
-          expect(details.applicationSubDomain)
+          expect(details.repoName)
             .to.eql('repo_with_symlink_hook');
         });
       });
@@ -154,12 +155,16 @@ describe('GitDeployer', function () {
           }
         }
       });
+      var org = new Organisation({
+        _id: 'org'
+      });
       var clock;
       before(function () {
         clock = sinon.useFakeTimers(moment().valueOf());
         var deployer = new GitDeployer();
         sinon.stub(deployer, 'getDetailsFromPath').returns(BBPromise.resolve({
-          applicationSubDomain: 'subdomain'
+          folderName: 'folder',
+          repoName: 'subdomain'
         }));
         sinon.stub(deployer, 'loadHoistJson').returns(BBPromise.resolve({
           setting: 'new',
@@ -167,6 +172,7 @@ describe('GitDeployer', function () {
             'key': 'true'
           }
         }));
+        sinon.stub(Organisation, 'findOneAsync').returns(BBPromise.resolve(org));
         sinon.stub(Application, 'findOneAsync').returns(BBPromise.resolve(application));
         sinon.stub(application, 'saveAsync').returns(BBPromise.resolve(null));
         deployer.updateConfig({
@@ -176,6 +182,12 @@ describe('GitDeployer', function () {
           },
           timestamp: moment()
         });
+      });
+      it('loads org based on folder name', function () {
+        expect(Organisation.findOneAsync)
+          .to.have.been.calledWith({
+            gitFolder: 'folder'
+          });
       });
       it('sets dev settings', function () {
         expect(application.settings.dev.setting)
@@ -190,15 +202,17 @@ describe('GitDeployer', function () {
         expect(application.saveAsync)
           .to.have.been.called;
       });
-      it('loads based on sub domain', function () {
+      it('loads based on gitRepo', function () {
         expect(Application.findOneAsync)
           .to.have.been.calledWith({
-            subDomain: 'subdomain'
+            organisation: 'org',
+            gitRepo: 'subdomain'
           });
       });
       after(function () {
         clock.restore();
         Application.findOneAsync.restore();
+        Organisation.findOneAsync.restore();
         application.saveAsync.restore();
       });
 
