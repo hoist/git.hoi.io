@@ -67,8 +67,9 @@ describe('GitActionListener', function () {
           .to.eql(true);
       });
       it('makes executable file', function () {
-        expect(fs.statSync(path.resolve(push.cwd, './hooks/post-receive')).mode)
-        .to.eql(33261);
+        var mode = fs.statSync(path.resolve(push.cwd, './hooks/post-receive')).mode.toString(8);
+        expect(mode.substring(mode.length-3,mode.length))
+        .to.eql('755');
       });
       it('substitues path', function () {
         expect(fs.readFileSync(path.resolve(push.cwd, './hooks/post-receive'), {
