@@ -1,6 +1,6 @@
 [{
   "name": "hoist-git-listener",
-  "script": "./listener-app.js",
+  "script": "./listener_app.js",
   "cwd": "./",
   "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
   "error_file": "/var/log/node/hoist-git-listener.stderr.log",
@@ -13,7 +13,7 @@
   }
 },{
   "name": "hoist-git-deployer",
-  "script": "./deployer-app.js",
+  "script": "./deployer_app.js",
   "cwd": "./",
   "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
   "error_file": "/var/log/node/hoist-git-deployer.stderr.log",
