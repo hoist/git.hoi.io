@@ -22,7 +22,7 @@ describe('GitActionListener', function () {
   describe('push', function () {
     describe('given an existing symlink hook', function () {
       var push = {
-        cwd: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook'),
+        cwd: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook.git'),
         accept: sinon.stub(),
         reject: sinon.stub()
       };

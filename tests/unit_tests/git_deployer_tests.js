@@ -81,7 +81,7 @@ describe('GitDeployer', function () {
       var loaded;
       before(function () {
         var deployer = new GitDeployer();
-        loaded = deployer.loadHoistJson(path.resolve(__dirname, '../fixtures/repo_with_symlink_hook'));
+        loaded = deployer.loadHoistJson(path.resolve(__dirname, '../fixtures/repo_with_symlink_hook.git'));
       });
       it('loads the content of hoist.json', function () {
         return loaded.then(function (json) {
@@ -277,7 +277,7 @@ describe('GitDeployer', function () {
 
       checkedOut = deployer.checkout({
         data: {
-          path: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook')
+          path: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook.git')
         },
         timestamp: moment(),
         log: sinon.stub()
