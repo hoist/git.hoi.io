@@ -1,10 +1,23 @@
 [{
   "name": "hoist-git-listener",
-  "script": "./app.js",
+  "script": "./listener-app.js",
   "cwd": "./",
   "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
   "error_file": "/var/log/node/hoist-git-listener.stderr.log",
   "out_file": "/var/log/node/hoist-git-listener.stdout.log",
+  "instances": "1",
+  "merge_logs": true,
+  "exec_mode": "fork_mode",
+  "env": {
+    "NODE_ENV": "production"
+  }
+},{
+  "name": "hoist-git-deployer",
+  "script": "./deployer-app.js",
+  "cwd": "./",
+  "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
+  "error_file": "/var/log/node/hoist-git-deployer.stderr.log",
+  "out_file": "/var/log/node/hoist-git-deployer.stdout.log",
   "instances": "1",
   "merge_logs": true,
   "exec_mode": "fork_mode",

@@ -1,8 +1,7 @@
 'use strict';
 
 var server = require('./lib/server');
-var Deployer = require('./lib/git_deployer');
-var deployer = new Deployer();
+
 process.on('message', function (msg) {
   console.log('got message', msg, msg === 'shutdown');
   if (msg === 'shutdown') {
@@ -10,22 +9,15 @@ process.on('message', function (msg) {
     setTimeout(function () {
       console.log('shutting down git server');
       server.stop(function () {
-        console.log('shutting down deploy agent');
-        deployer.stop(function () {
-          process.exit(0);
-        });
+        process.exit(0);
       });
     }, 500);
   }
 });
-deployer.start(function (err) {
-  if(err){
+
+server.start(function (err) {
+  if (err) {
     throw err;
   }
-  server.start(function (err) {
-    if(err){
-      throw err;
-    }
-    console.log('started');
-  });
+  console.log('started');
 });
