@@ -11,7 +11,7 @@ var Organisation = hoistModel.Organisation;
 var Application = hoistModel.Application;
 var BBPromise = require('bluebird');
 
-describe.only('GitActionListener', function () {
+describe('GitActionListener', function () {
 
   this.timeout(2000);
   var repos = {
@@ -58,20 +58,15 @@ describe.only('GitActionListener', function () {
           accept: sinon.stub(),
           reject: sinon.stub()
         };
-        before(function () {
+        before(function (done) {
+          push.accept = done;
           sandbox = sinon.sandbox.create();
           sandbox.stub(User, 'findOneAsync').returns(BBPromise.resolve(user));
           sandbox.stub(Organisation, 'findOneAsync').returns(BBPromise.resolve(org));
           sandbox.stub(Application, 'findOneAsync').returns(BBPromise.resolve(app));
           return gitListener.push(push);
         });
-
-        it('should call accept', function () {
-          /* jshint -W030 */
-          expect(push.accept)
-            .to.have.been.called;
-        });
-
+        
         after(function () {
           sandbox.restore();
         });
@@ -238,10 +233,11 @@ describe.only('GitActionListener', function () {
           sandbox.stub(Application, 'findOneAsync').returns(BBPromise.resolve(app));
           return gitListener.push(push);
         });
-
-        it('should call reject', function () {
-          expect(push.reject)
-            .to.have.been.calledWith(500, 'hook file already exists: ' + path.resolve(push.cwd, './hooks/post-receive'));
+        
+        it('should call accept', function () {
+          /* jshint -W030 */
+          expect(push.accept)
+            .to.have.been.called;
         });
 
         after(function () {
@@ -403,26 +399,32 @@ describe.only('GitActionListener', function () {
           accept: sinon.stub(),
           reject: sinon.stub()
         };
-        before(function () {
+        before(function (done) {
+          push.accept = done;
           sandbox = sinon.sandbox.create();
-          sandbox.stub(fs, 'symlink').callsArg(2);
           sandbox.stub(User, 'findOneAsync').returns(BBPromise.resolve(user));
           sandbox.stub(Organisation, 'findOneAsync').returns(BBPromise.resolve(org));
           sandbox.stub(Application, 'findOneAsync').returns(BBPromise.resolve(app));
           return gitListener.push(push);
         });
 
-        it('should call accept', function () {
-          /* jshint -W030 */
-          expect(push.accept)
-            .to.have.been.called;
+        it('should create hook file', function () {
+          expect(fs.existsSync(path.resolve(push.cwd, './hooks/post-receive')))
+            .to.eql(true);
         });
-        it('should create symlink', function () {
-          expect(fs.symlink)
-            .to.have.been
-            .calledWith(path.resolve(__dirname, '../../lib/hook.js'), path.resolve(push.cwd, './hooks/post-receive'));
+        it('makes executable file', function () {
+          var mode = fs.statSync(path.resolve(push.cwd, './hooks/post-receive')).mode.toString(8);
+          expect(mode.substring(mode.length - 3, mode.length))
+            .to.eql('755');
+        });
+        it('substitues path', function () {
+          expect(fs.readFileSync(path.resolve(push.cwd, './hooks/post-receive'), {
+            encoding: 'utf8'
+          }))
+            .to.contain(path.resolve(__dirname, '../../lib/hook.js'));
         });
         after(function () {
+          fs.unlinkSync(path.resolve(push.cwd, './hooks/post-receive'));
           sandbox.restore();
         });
       });

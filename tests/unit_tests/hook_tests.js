@@ -32,7 +32,6 @@ describe('post-receive hook', function () {
     kue.createQueue.restore();
   });
   it('should poll for log messages every 500 ms', function () {
-    clock.tick(450);
     /* jshint -W030 */
     expect(kue.Job.log)
       .to.have.not.been.called;
