@@ -1,0 +1,7 @@
+{
+  "Hoist":{
+    "security":{
+      "passwordStrength":12
+    }
+  }
+}
