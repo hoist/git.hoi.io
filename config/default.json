@@ -13,6 +13,9 @@
     },
     "mongo":{
       "db":"mongodb://localhost/hoist-default"
+    },
+    "security":{
+      "passwordStrength":12
     }
   }
 }
