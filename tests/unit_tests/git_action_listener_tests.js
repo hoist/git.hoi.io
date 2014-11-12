@@ -18,19 +18,22 @@ describe('GitActionListener', function () {
     on: sinon.stub()
   };
   var gitListener;
-  var username = 'test@hoi.io';
+  var username = 'Test@hoi.io';
   var password = 'password';
 
   var user = new User({
     emailAddresses: [{
-      address: username
-    }]
+      address: username.toLowerCase()
+    }],
+    organisations: ['orgid']
   });
   var org = new Organisation({
-    name: 'org',
+    _id: 'orgid',
+    name: 'org'
   });
   var app = new Application({
-    name: 'app',
+    _id: 'appid',
+    name: 'app'
   });
 
   before(function () {
@@ -239,6 +242,33 @@ describe('GitActionListener', function () {
           expect(push.accept)
             .to.have.been.called;
         });
+        it('loads user based on correct params', function () {
+          expect(User.findOneAsync)
+            .to.have.been.calledWith({
+              emailAddresses: {
+                $elemMatch: {
+                  address: 'test@hoi.io'
+                }
+              }
+            });
+        });
+        it('loads organisation with correct params', function () {
+          expect(Organisation.findOneAsync)
+            .to.have.been.calledWith(
+              sinon.match(function(query){
+                expect(query.gitFolder).to.eql('org');
+                expect(query._id.$in).to.eql(user.organisations);
+                return true;
+              })
+            );
+        });
+        it('loads application with correct params', function () {
+          expect(Application.findOneAsync)
+            .to.have.been.calledWith({
+              gitRepo: 'app',
+              organisation: 'orgid'
+            });
+        });
 
         after(function () {
           sandbox.restore();
@@ -419,8 +449,8 @@ describe('GitActionListener', function () {
         });
         it('substitues path', function () {
           expect(fs.readFileSync(path.resolve(push.cwd, './hooks/post-receive'), {
-            encoding: 'utf8'
-          }))
+              encoding: 'utf8'
+            }))
             .to.contain(path.resolve(__dirname, '../../lib/hook.js'));
         });
         after(function () {
