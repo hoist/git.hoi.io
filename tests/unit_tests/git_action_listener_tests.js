@@ -6,7 +6,7 @@ var expect = require('chai').expect;
 var path = require('path');
 var fs = require('fs');
 var hoistModel = require('hoist-model');
-var User = hoistModel.User;
+var User = hoistModel.HoistUser;
 var Organisation = hoistModel.Organisation;
 var Application = hoistModel.Application;
 var BBPromise = require('bluebird');
@@ -66,7 +66,7 @@ describe('GitActionListener', function () {
           sandbox.stub(Application, 'findOneAsync').returns(BBPromise.resolve(app));
           return gitListener.push(push);
         });
-        
+
         after(function () {
           sandbox.restore();
         });
@@ -233,7 +233,7 @@ describe('GitActionListener', function () {
           sandbox.stub(Application, 'findOneAsync').returns(BBPromise.resolve(app));
           return gitListener.push(push);
         });
-        
+
         it('should call accept', function () {
           /* jshint -W030 */
           expect(push.accept)
