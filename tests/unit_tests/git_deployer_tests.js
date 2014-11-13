@@ -148,7 +148,7 @@ describe('GitDeployer', function () {
     describe('with a valid save', function () {
       var application = new Application({
         settings: {
-          dev: {
+          live: {
             setting: 'old'
           }
         }
@@ -186,12 +186,12 @@ describe('GitDeployer', function () {
             gitFolder: 'folder'
           });
       });
-      it('sets dev settings', function () {
-        expect(application.settings.dev.setting)
+      it('sets live settings', function () {
+        expect(application.settings.live.setting)
           .to.eql('new');
       });
       it('sets deploy timestamp', function () {
-        expect(application.lastDeploy.dev)
+        expect(application.lastDeploy.live)
           .to.eql(moment().toDate());
       });
       it('saves', function () {
