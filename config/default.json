@@ -23,6 +23,10 @@
     },
     "dnode":{
       "port":8948
+    },
+
+    "executor":{
+      "root":"./tests/fixtures/checkouts"
     }
   }
 }

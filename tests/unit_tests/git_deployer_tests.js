@@ -228,10 +228,12 @@ describe('GitDeployer', function () {
       var p = BBPromise.resolve(null);
       sinon.stub(deployer, 'checkout').returns(p);
       sinon.stub(deployer, 'updateConfig').returns(p);
+      sinon.stub(deployer, 'npm').returns(p);
       deployer.deploy(job, logStub, callback).then(done);
     });
     after(function () {
       clock.restore();
+
     });
     it('adds timestamp', function () {
       expect(job.timestamp).to.eql(moment());
