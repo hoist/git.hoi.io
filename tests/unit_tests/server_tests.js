@@ -128,8 +128,11 @@ describe('server', function () {
           .to.have.been.called;
       });
       describe('on request', function () {
-        var req = {};
-        var res = {};
+        var req = {headers:{
+          authorization:'auth'
+        }};
+        var res = {
+          };
         before(function () {
           http.createServer.callArgWith(0, req, res);
         });
