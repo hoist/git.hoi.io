@@ -1,5 +1,9 @@
 {
   "Hoist": {
+    "application":{
+      "name":"hoist-git-listener"
+    },
+    "debug":true,
     "kue": {
       "host": "localhost",
       "port": 6379,

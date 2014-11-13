@@ -37,6 +37,7 @@
     "config": "^1.2.4",
     "fs-git": "^0.1.4",
     "hoist-errors": "git://github.com/hoist/hoist-errors",
+    "hoist-logger": "git://github.com/hoist/hoist-logger",
     "hoist-model": "git://github.com/hoist/hoist-model",
     "jsonlint": "^1.6.2",
     "kue": "^0.8.9",
