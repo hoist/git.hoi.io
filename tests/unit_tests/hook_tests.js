@@ -1,25 +1,22 @@
 'use strict';
 var sinon = require('sinon');
-var kue = require('kue');
+var dnode = require('dnode');
 var expect = require('chai').expect;
 
 describe('post-receive hook', function () {
   var clock;
-  var stubQueue = {};
-  stubQueue.create = sinon.stub().returns(stubQueue);
-  stubQueue.priority = sinon.stub().returns(stubQueue);
-  stubQueue.attempts = sinon.stub().returns(stubQueue);
-  stubQueue.on = sinon.stub();
-  stubQueue.save = sinon.stub();
-  stubQueue.shutdown = sinon.stub().callsArg(0);
+  var stubRemote = {};
+  stubRemote.on = sinon.stub();
+  stubRemote.end = sinon.stub();
+  stubRemote.deploy = sinon.stub();
 
 
   before(function () {
     clock = sinon.useFakeTimers();
     sinon.stub(console, 'log');
-    sinon.stub(kue.Job, 'log');
-    sinon.stub(kue, 'createQueue', function () {
-      return stubQueue;
+    stubRemote.on.onCall(0).callsArgWith(1, stubRemote);
+    sinon.stub(dnode, 'connect', function () {
+      return stubRemote;
     });
     sinon.stub(process, 'exit');
     require('../../lib/hook');
@@ -28,94 +25,36 @@ describe('post-receive hook', function () {
   after(function () {
     clock.restore();
     process.exit.restore();
-    kue.Job.log.restore();
-    kue.createQueue.restore();
+    dnode.connect.restore();
   });
-  it('should poll for log messages every 500 ms', function () {
+  it('logs message sent to first function', function () {
     /* jshint -W030 */
-    expect(kue.Job.log)
-      .to.have.not.been.called;
-    clock.tick(100);
-    expect(kue.Job.log)
-      .to.have.been.called;
-  });
-  it('should log only new log messages', function () {
     sinon.stub(console, 'log');
-    //make sure we have at least three calls to retrieve logs
-    clock.tick(1500);
-    //initial log messages
-    var log = ['message 1', 'message 2'];
-    var call1 = kue.Job.log.getCall(0);
-    var call2 = kue.Job.log.getCall(1);
-    var call3 = kue.Job.log.getCall(2);
-    call1.args[1](null, log);
-    call2.args[1](null, log);
-    //add a log message
-    log = log.slice(0);
-    log.push('message 3');
-    call3.args[1](null, log);
-    /* jshint -W030 */
-    expect(console.log).to.have.been.calledThrice;
+    stubRemote.deploy.callArgWith(1, 'this is a message');
+    expect(console.log)
+      .to.have.been.calledWith('this is a message');
     console.log.restore();
   });
-  it('should create a GitPush job', function () {
-    expect(stubQueue.create)
-      .to.have.been.calledWith('GitPush', {
+  it('calls deploy', function () {
+    expect(stubRemote.deploy)
+      .to.have.been.calledWith({
         path: process.cwd()
-      });
+      }, sinon.match.func, sinon.match.func);
   });
-  it('should subscribe to complete', function () {
-    expect(stubQueue.on)
-      .to.have.been.calledWith('complete');
-  });
-  it('should subscribe to failed', function () {
-    expect(stubQueue.on)
-      .to.have.been.calledWith('failed');
-  });
-  describe('on complete', function () {
+  describe('on end', function () {
     before(function () {
-      sinon.stub(console, 'log');
-      kue.Job.log.reset();
-      for (var i = 0; i < stubQueue.on.callCount; i++) {
-        var call = stubQueue.on.getCall(i);
-        if (call.args[0] === 'complete') {
-          call.args[1]();
-          break;
-        }
-      }
-      kue.Job.log.callArgWith(1, null, []);
-      console.log.restore();
+      stubRemote.deploy.callArg(2);
     });
-    it('should shutdown kue', function () {
-      /* jshint -W030 */
-      expect(stubQueue.shutdown)
-        .to.have.been.called;
-    });
-    it('should exit process with a 0 exit code', function () {
+    it('exits process with a 0 exit code', function () {
       expect(process.exit)
         .to.have.been.calledWith(0);
     });
   });
   describe('on failure', function () {
     before(function () {
-      sinon.stub(console, 'log');
-      kue.Job.log.reset();
-      for (var i = 0; i < stubQueue.on.callCount; i++) {
-        var call = stubQueue.on.getCall(i);
-        if (call.args[0] === 'failed') {
-          call.args[1]();
-          break;
-        }
-      }
-      kue.Job.log.callArgWith(1, null, []);
-      console.log.restore();
+      stubRemote.deploy.callArgWith(2, new Error('an error occured'));
     });
-    it('should shutdown kue', function () {
-      /* jshint -W030 */
-      expect(stubQueue.shutdown)
-        .to.have.been.called;
-    });
-    it('should exit process with a non 0 exit code', function () {
+    it('exits process with a non 0 exit code', function () {
       expect(process.exit)
         .to.have.been.calledWith(1);
     });

@@ -1,11 +1,11 @@
 'use strict';
+
 require('../bootstrap');
 var moment = require('moment');
 var sinon = require('sinon');
 var fs = require('fs');
 var expect = require('chai').expect;
-var GitDeployer = require('../../lib/git_deployer');
-var kue = require('kue');
+
 var BBPromise = require('bluebird');
 var path = require('path');
 var errors = require('hoist-errors');
@@ -15,44 +15,41 @@ var Application = require('hoist-model').Application;
 var Organisation = require('hoist-model').Organisation;
 var mongoose = require('hoist-model')._mongoose;
 
+var dnode = require('dnode');
+var DNode = require('dnode/lib/dnode');
+
 describe('GitDeployer', function () {
   describe('#start', function () {
-    var stubQueue = {
-      process: sinon.stub()
-    };
+
     var deployer;
     before(function (done) {
-      sinon.stub(kue, 'createQueue').returns(stubQueue);
+      sinon.stub(DNode.prototype, 'listen');
+
+      var GitDeployer = require('../../lib/git_deployer');
       deployer = new GitDeployer();
+
+
+
       sinon.stub(mongoose, 'connect').callsArg(1);
       deployer.start(done);
     });
     after(function () {
-      kue.createQueue.restore();
+      DNode.prototype.listen.restore();
       mongoose.connect.restore();
     });
     it('connects to mongo', function () {
       expect(mongoose.connect)
         .to.have.been.calledWith('mongodb://localhost/hoist-default');
     });
-    it('listens for GitPush jobs', function () {
-      expect(stubQueue.process)
-        .to.have.been.calledWith('GitPush');
-    });
-    it('maps GitPush jobs to #deploy', function () {
-      expect(stubQueue.process.firstCall.args[2])
-        .to.eql(deployer.deploy);
-    });
   });
   describe('#stop', function () {
-    var stubQueue = {
-      shutdown: sinon.stub().callsArg(0)
-    };
     var deployer;
     var originalConnections;
     before(function (done) {
+      var GitDeployer = require('../../lib/git_deployer');
       deployer = new GitDeployer();
-      deployer.queue = stubQueue;
+      deployer.dnodeServer = dnode({});
+
       originalConnections = mongoose.connections;
       mongoose.connections = [];
       mongoose.connections.push({
@@ -65,13 +62,9 @@ describe('GitDeployer', function () {
       mongoose.connections = originalConnections;
       mongoose.disconnect.restore();
     });
-    it('shuts down queue', function () {
-      expect(stubQueue.shutdown)
-        .to.have.been.calledWith(sinon.match.func, 5000);
-    });
     it('disconnects from mongo', function () {
-      /* jshint -W030 */
-      expect(mongoose.disconnect)
+
+      return expect(mongoose.disconnect)
         .to.have.been.called;
     });
 
@@ -80,13 +73,14 @@ describe('GitDeployer', function () {
     describe('with a valid git repo', function () {
       var loaded;
       before(function () {
+        var GitDeployer = require('../../lib/git_deployer');
         var deployer = new GitDeployer();
         loaded = deployer.loadHoistJson(path.resolve(__dirname, '../fixtures/repo_with_symlink_hook.git'));
       });
       it('loads the content of hoist.json', function () {
         return loaded.then(function (json) {
-          /* jshint -W030 */
-          expect(json.modules[0])
+
+          return expect(json.modules[0])
             .to.exist;
         });
       });
@@ -94,6 +88,7 @@ describe('GitDeployer', function () {
     describe('with a git repo that doesn\'t exist', function () {
       var loaded;
       before(function () {
+        var GitDeployer = require('../../lib/git_deployer');
         var deployer = new GitDeployer();
         loaded = deployer.loadHoistJson(path.resolve(__dirname, '../fixtures/not_here'));
       });
@@ -105,6 +100,7 @@ describe('GitDeployer', function () {
     describe('with a git repo that doesn\'t have a master branch', function () {
       var loaded;
       before(function () {
+        var GitDeployer = require('../../lib/git_deployer');
         var deployer = new GitDeployer();
         loaded = deployer.loadHoistJson(path.resolve(__dirname, '../fixtures/repo_sans_hook'));
       });
@@ -116,6 +112,7 @@ describe('GitDeployer', function () {
     describe('with a git repo that doesn\'t contain a hoist.json', function () {
       var loaded;
       before(function () {
+        var GitDeployer = require('../../lib/git_deployer');
         var deployer = new GitDeployer();
         loaded = deployer.loadHoistJson(path.resolve(__dirname, '../fixtures/repo_with_file_hook'));
       });
@@ -129,6 +126,7 @@ describe('GitDeployer', function () {
     describe('using a full path', function () {
       var parsed;
       before(function () {
+        var GitDeployer = require('../../lib/git_deployer');
         var deployer = new GitDeployer();
         parsed = deployer.getDetailsFromPath(path.resolve(__dirname, '../fixtures/repo_with_symlink_hook.git'));
       });
@@ -161,6 +159,7 @@ describe('GitDeployer', function () {
       var clock;
       before(function () {
         clock = sinon.useFakeTimers(moment().valueOf());
+        var GitDeployer = require('../../lib/git_deployer');
         var deployer = new GitDeployer();
         sinon.stub(deployer, 'getDetailsFromPath').returns(BBPromise.resolve({
           folderName: 'folder',
@@ -177,9 +176,7 @@ describe('GitDeployer', function () {
         sinon.stub(application, 'saveAsync').returns(BBPromise.resolve(null));
         deployer.updateConfig({
           log: sinon.stub(),
-          data: {
-            path: '/path/to/repo'
-          },
+          path: '/path/to/repo',
           timestamp: moment()
         });
       });
@@ -198,8 +195,8 @@ describe('GitDeployer', function () {
           .to.eql(moment().toDate());
       });
       it('saves', function () {
-        /* jshint -W030 */
-        expect(application.saveAsync)
+
+        return expect(application.saveAsync)
           .to.have.been.called;
       });
       it('loads based on gitRepo', function () {
@@ -221,17 +218,17 @@ describe('GitDeployer', function () {
   describe('#deploy', function () {
     var deployer;
     var callback = sinon.stub();
-    var job = {
-      log: sinon.stub()
-    };
+    var job = {};
+    var logStub = sinon.stub();
     var clock;
     before(function (done) {
       clock = sinon.useFakeTimers(moment().valueOf());
+      var GitDeployer = require('../../lib/git_deployer');
       deployer = new GitDeployer();
       var p = BBPromise.resolve(null);
       sinon.stub(deployer, 'checkout').returns(p);
       sinon.stub(deployer, 'updateConfig').returns(p);
-      deployer.deploy(job, callback).then(done);
+      deployer.deploy(job, logStub, callback).then(done);
     });
     after(function () {
       clock.restore();
@@ -248,13 +245,13 @@ describe('GitDeployer', function () {
         .to.have.been.calledWith(job);
     });
     it('creates job log', function () {
-      /* jshint -W030 */
-      expect(job.log)
+
+      return expect(logStub)
         .to.have.been.called;
     });
     it('completes', function () {
-      /* jshint -W030 */
-      expect(callback)
+
+      return expect(callback)
         .to.have.been.called;
     });
   });
@@ -262,6 +259,7 @@ describe('GitDeployer', function () {
     var checkedOut;
     var clock;
     before(function () {
+      var GitDeployer = require('../../lib/git_deployer');
       var deployer = new GitDeployer();
       config.util.setModuleDefaults('Hoist', {
         git: {
@@ -276,9 +274,7 @@ describe('GitDeployer', function () {
       clock = sinon.useFakeTimers(moment().valueOf());
 
       checkedOut = deployer.checkout({
-        data: {
-          path: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook.git')
-        },
+        path: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook.git'),
         timestamp: moment(),
         log: sinon.stub()
       });

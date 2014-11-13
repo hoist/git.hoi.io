@@ -20,6 +20,9 @@
     },
     "security":{
       "passwordStrength":12
+    },
+    "dnode":{
+      "port":8948
     }
   }
 }
