@@ -293,4 +293,8 @@ describe('GitDeployer', function () {
     });
 
   });
+  describe('#updateSchedules',function(){
+    it('removes existing schedules');
+    it('registers new schedules');
+  });
 });
