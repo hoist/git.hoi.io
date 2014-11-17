@@ -32,6 +32,7 @@
     "sinon-chai": "^2.5.0"
   },
   "dependencies": {
+    "agenda": "^0.6.24",
     "bluebird": "^2.3.5",
     "chalk": "^0.5.1",
     "config": "^1.2.4",
