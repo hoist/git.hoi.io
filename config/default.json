@@ -16,7 +16,8 @@
       "repositories": "/tmp/repos"
     },
     "mongo": {
-      "db": "mongodb://localhost/hoist-default"
+      "db": "mongodb://localhost/hoist-default",
+      "agenda": "mongodb://localhost/hoist-schedules"
     },
     "security": {
       "passwordStrength": 12

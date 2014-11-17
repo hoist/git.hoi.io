@@ -28,8 +28,6 @@ describe('GitDeployer', function () {
       var GitDeployer = require('../../lib/git_deployer');
       deployer = new GitDeployer();
 
-
-
       sinon.stub(mongoose, 'connect').callsArg(1);
       deployer.start(done);
     });
@@ -300,14 +298,61 @@ describe('GitDeployer', function () {
       repeatEvery: sinon.stub()
     };
     before(function () {
-      sinon.stub(Agenda.prototype, 'cancel').callsArg(1);
+      sinon.stub(Agenda.prototype, 'cancel').callsArgWith(1, null, 1);
       sinon.stub(Agenda.prototype, 'create').returns(stubJob);
+      sinon.stub(Agenda.prototype, 'database').returnsThis();
+      var job = {
+        log: sinon.stub()
+      };
+      var GitDeployer = require('../../lib/git_deployer');
+      var deployer = new GitDeployer();
+      var application = new Application({
+        _id: 'appid',
+        settings: {
+          live: {
+            schedules: {
+              '0 0 * * *': {
+                'events': [
+                  'nightly:batch:start'
+                ]
+              },
+              '10 0 * * *': {
+                'events': [
+                  'nightly:batch:start',
+                  'nightly:batch:stop'
+                ]
+              }
+            }
+          }
+        }
+      });
+      return deployer.updateSchedules(job, application);
     });
     after(function () {
       Agenda.prototype.create.restore();
       Agenda.prototype.cancel.restore();
     });
-    it('removes existing schedules');
-    it('registers new schedules' );
+    it('removes existing schedules', function () {
+      return expect(Agenda.prototype.cancel)
+        .to.have.been.calledWith({
+          'data.application': 'appid'
+        });
+    });
+    it('registers new schedules', function () {
+      expect(Agenda.prototype.create)
+        .to.have.been.calledWith('create:event', {
+          events: ['nightly:batch:start'],
+          application: 'appid',
+          environment: 'live'
+        }).and.calledWith('create:event', {
+          events: ['nightly:batch:start', 'nightly:batch:stop'],
+          application: 'appid',
+          environment: 'live'
+        });
+    });
+    it('sets correct schedules', function () {
+      expect(stubJob.repeatEvery)
+        .to.have.been.calledWith('10 0 * * *').and.calledWith('0 0 * * *');
+    });
   });
 });
