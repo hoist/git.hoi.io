@@ -5,7 +5,7 @@ var moment = require('moment');
 var sinon = require('sinon');
 var fs = require('fs');
 var expect = require('chai').expect;
-
+var Agenda = require('agenda');
 var BBPromise = require('bluebird');
 var path = require('path');
 var errors = require('hoist-errors');
@@ -229,6 +229,7 @@ describe('GitDeployer', function () {
       sinon.stub(deployer, 'checkout').returns(p);
       sinon.stub(deployer, 'updateConfig').returns(p);
       sinon.stub(deployer, 'npm').returns(p);
+      sinon.stub(deployer, 'updateSchedules').returns(p);
       deployer.deploy(job, logStub, callback).then(done);
     });
     after(function () {
@@ -293,8 +294,20 @@ describe('GitDeployer', function () {
     });
 
   });
-  describe('#updateSchedules',function(){
+  describe('#updateSchedules', function () {
+    var stubJob = {
+      save: sinon.stub().callsArg(0),
+      repeatEvery: sinon.stub()
+    };
+    before(function () {
+      sinon.stub(Agenda.prototype, 'cancel').callsArg(1);
+      sinon.stub(Agenda.prototype, 'create').returns(stubJob);
+    });
+    after(function () {
+      Agenda.prototype.create.restore();
+      Agenda.prototype.cancel.restore();
+    });
     it('removes existing schedules');
-    it('registers new schedules');
+    it('registers new schedules' );
   });
 });
