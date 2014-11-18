@@ -13,7 +13,8 @@
       "port": 7000
     },
     "git": {
-      "repositories": "/tmp/repos"
+      "repositories": "/tmp/repos",
+      "checkoutTmpDir": "./tests/fixtures/checkouts"
     },
     "mongo": {
       "db": "mongodb://localhost/hoist-default"
@@ -26,7 +27,7 @@
     },
 
     "executor": {
-      "root": "./tests/fixtures/checkouts"
+      "root": "./tests/fixtures/deploys"
     }
   }
 }

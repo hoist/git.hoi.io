@@ -47,3 +47,4 @@ config/test.json
 .queues
 
 tests/fixtures/checkouts/**/*
+tests/fixtures/deploys/**/*

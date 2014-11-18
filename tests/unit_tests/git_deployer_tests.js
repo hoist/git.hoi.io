@@ -229,6 +229,7 @@ describe('GitDeployer', function () {
       sinon.stub(deployer, 'npm').returns(p);
       sinon.stub(deployer, 'updateSchedules').returns(p);
       sinon.stub(deployer, 'clearOldDirectories').returns(p);
+      sinon.stub(deployer, 'deployFiles').returns(p);
       deployer.deploy(job, logStub, logStub, callback).then(done);
     });
     after(function () {
