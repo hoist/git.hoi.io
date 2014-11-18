@@ -228,7 +228,7 @@ describe('GitDeployer', function () {
       sinon.stub(deployer, 'updateConfig').returns(p);
       sinon.stub(deployer, 'npm').returns(p);
       sinon.stub(deployer, 'updateSchedules').returns(p);
-      deployer.deploy(job, logStub, callback).then(done);
+      deployer.deploy(job, logStub, logStub, callback).then(done);
     });
     after(function () {
       clock.restore();
@@ -277,7 +277,8 @@ describe('GitDeployer', function () {
       checkedOut = deployer.checkout({
         path: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook.git'),
         timestamp: moment(),
-        log: sinon.stub()
+        log: sinon.stub(),
+        write: sinon.stub()
       });
     });
     after(function (done) {

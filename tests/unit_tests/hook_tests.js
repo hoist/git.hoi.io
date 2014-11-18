@@ -43,7 +43,7 @@ describe('post-receive hook', function () {
   });
   describe('on end', function () {
     before(function () {
-      stubRemote.deploy.callArg(2);
+      stubRemote.deploy.callArg(3);
     });
     it('exits process with a 0 exit code', function () {
       expect(process.exit)
@@ -52,7 +52,7 @@ describe('post-receive hook', function () {
   });
   describe('on failure', function () {
     before(function () {
-      stubRemote.deploy.callArgWith(2, new Error('an error occured'));
+      stubRemote.deploy.callArgWith(3, new Error('an error occured'));
     });
     it('exits process with a non 0 exit code', function () {
       expect(process.exit)
