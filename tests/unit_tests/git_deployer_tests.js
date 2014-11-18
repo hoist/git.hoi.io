@@ -14,7 +14,7 @@ var rmdirRecursive = require('rmdir-recursive');
 var Application = require('hoist-model').Application;
 var Organisation = require('hoist-model').Organisation;
 var mongoose = require('hoist-model')._mongoose;
-
+var _ = require('lodash');
 var dnode = require('dnode');
 var DNode = require('dnode/lib/dnode');
 
@@ -357,5 +357,75 @@ describe('GitDeployer', function () {
       expect(stubJob.repeatEvery)
         .to.have.been.calledWith('10 0 * * *').and.calledWith('0 0 * * *');
     });
+  });
+  describe('#clearDirectories', function () {
+    var basePath = path.resolve(__dirname, '../fixtures/checkouts');
+    before(function () {
+      var GitDeployer = require('../../lib/git_deployer');
+      var deployer = new GitDeployer();
+      var mkdirp = BBPromise.promisify(require('mkdirp'));
+      return BBPromise.all(_.map(_.range(5), function (num) {
+        return mkdirp(path.join(basePath, num + ''));
+      })).then(function () {
+        return mkdirp(path.join(basePath, '.npmcache'));
+      }).then(function () {
+        return deployer.clearDirectories(basePath);
+      });
+    });
+    it('keeps largest three directories', function () {
+      expect(fs.existsSync(path.join(basePath, '2'))).to.eql(true);
+      expect(fs.existsSync(path.join(basePath, '3'))).to.eql(true);
+      expect(fs.existsSync(path.join(basePath, '4'))).to.eql(true);
+    });
+    it('deletes directories', function () {
+      expect(fs.existsSync(path.join(basePath, '0'))).to.eql(false);
+      expect(fs.existsSync(path.join(basePath, '1'))).to.eql(false);
+    });
+    it('keeps .npmcache dir', function () {
+      expect(fs.existsSync(path.join(basePath, '.npmcache'))).to.eql(true);
+    });
+    after(function (done) {
+      rmdirRecursive(path.resolve(__dirname, '../fixtures/checkouts'), done);
+    });
+  });
+  describe('#clearOldDirectories', function () {
+    var GitDeployer = require('../../lib/git_deployer');
+    var deployer = new GitDeployer();
+    before(function () {
+
+      sinon.stub(deployer, 'clearDirectories').returns(BBPromise.resolve(null));
+      return deployer.clearOldDirectories({
+        path: '/path/to/repo'
+      });
+
+    });
+    it('clears checkout directories', function () {
+      expect(deployer.clearDirectories)
+        .to.be.calledWith('tests/fixtures/checkouts/to/repo');
+    });
+    it('clears deployment directories', function () {
+      expect(deployer.clearDirectories)
+        .to.be.calledWith('tests/fixtures/deploys/to/repo');
+    });
+  });
+  describe('#deployFiles', function () {
+    var fs = require('fs-extra');
+    var timestamp = moment();
+    before(function () {
+      sinon.stub(fs, 'copy').callsArg(2);
+      var GitDeployer = require('../../lib/git_deployer');
+      var deployer = new GitDeployer();
+      return deployer.deployFiles({
+        timestamp: timestamp,
+        path: '/path/to/repo'
+      });
+    });
+    after(function(){
+      fs.copy.restore();
+    });
+    it('copies directories', function () {
+      expect(fs.copy).to.have.been.calledWith('tests/fixtures/checkouts/to/repo/'+timestamp.format('X'), 'tests/fixtures/deploys/to/repo/'+timestamp.format('X'));
+    });
+
   });
 });
