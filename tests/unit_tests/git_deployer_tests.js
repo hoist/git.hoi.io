@@ -417,7 +417,9 @@ describe('GitDeployer', function () {
       var deployer = new GitDeployer();
       return deployer.deployFiles({
         timestamp: timestamp,
-        path: '/path/to/repo'
+        path: '/path/to/repo',
+        write: sinon.stub(),
+        log: sinon.stub()
       });
     });
     after(function(){
