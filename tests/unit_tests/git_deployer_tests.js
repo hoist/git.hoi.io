@@ -228,6 +228,7 @@ describe('GitDeployer', function () {
       sinon.stub(deployer, 'updateConfig').returns(p);
       sinon.stub(deployer, 'npm').returns(p);
       sinon.stub(deployer, 'updateSchedules').returns(p);
+      sinon.stub(deployer, 'clearOldDirectories').returns(p);
       deployer.deploy(job, logStub, logStub, callback).then(done);
     });
     after(function () {
