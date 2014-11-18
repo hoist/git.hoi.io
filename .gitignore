@@ -45,3 +45,5 @@ log/*
 config/runtime.json
 config/test.json
 .queues
+
+tests/fixtures/checkouts/**/*
