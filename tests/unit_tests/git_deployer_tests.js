@@ -73,7 +73,7 @@ describe('GitDeployer', function () {
       before(function () {
         var GitDeployer = require('../../lib/git_deployer');
         var deployer = new GitDeployer();
-        loaded = deployer.loadHoistJson(path.resolve(__dirname, '../fixtures/repo_with_symlink_hook.git'));
+        loaded = deployer.loadHoistJson(path.resolve(__dirname, '../fixtures/repo_with_symlink_hook.git'),sinon.stub());
       });
       it('loads the content of hoist.json', function () {
         return loaded.then(function (json) {
