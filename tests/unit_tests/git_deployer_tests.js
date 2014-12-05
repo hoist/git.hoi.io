@@ -73,7 +73,7 @@ describe('GitDeployer', function () {
       before(function () {
         var GitDeployer = require('../../lib/git_deployer');
         var deployer = new GitDeployer();
-        loaded = deployer.loadHoistJson(path.resolve(__dirname, '../fixtures/repo_with_symlink_hook.git'),sinon.stub());
+        loaded = deployer.loadHoistJson(path.resolve(__dirname, '../fixtures/repo_with_symlink_hook.git'), sinon.stub());
       });
       it('loads the content of hoist.json', function () {
         return loaded.then(function (json) {
@@ -413,6 +413,7 @@ describe('GitDeployer', function () {
     var timestamp = moment();
     before(function () {
       sinon.stub(fs, 'copy').callsArg(2);
+      sinon.stub(fs, 'symlink').callsArg(2);
       var GitDeployer = require('../../lib/git_deployer');
       var deployer = new GitDeployer();
       return deployer.deployFiles({
@@ -422,11 +423,11 @@ describe('GitDeployer', function () {
         log: sinon.stub()
       });
     });
-    after(function(){
+    after(function () {
       fs.copy.restore();
     });
     it('copies directories', function () {
-      expect(fs.copy).to.have.been.calledWith('tests/fixtures/checkouts/to/repo/'+timestamp.format('X'), 'tests/fixtures/deploys/to/repo/'+timestamp.format('X'));
+      expect(fs.copy).to.have.been.calledWith('tests/fixtures/checkouts/to/repo/' + timestamp.format('X'), 'tests/fixtures/deploys/to/repo/' + timestamp.format('X'));
     });
 
   });
