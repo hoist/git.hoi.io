@@ -256,7 +256,7 @@ describe('GitActionListener', function () {
           expect(Organisation.findOneAsync)
             .to.have.been.calledWith(
               sinon.match(function(query){
-                expect(query.gitFolder).to.eql('org');
+                expect(query.slug).to.eql('org');
                 expect(query._id.$in).to.eql(user.organisations);
                 return true;
               })

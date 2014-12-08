@@ -181,7 +181,7 @@ describe('GitDeployer', function () {
       it('loads org based on folder name', function () {
         expect(Organisation.findOneAsync)
           .to.have.been.calledWith({
-            gitFolder: 'folder'
+            slug: 'folder'
           });
       });
       it('sets live settings', function () {
