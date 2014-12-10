@@ -201,7 +201,7 @@ describe('GitDeployer', function () {
         expect(Application.findOneAsync)
           .to.have.been.calledWith({
             organisation: 'org',
-            gitRepo: 'subdomain'
+            slug: 'subdomain'
           });
       });
       after(function () {

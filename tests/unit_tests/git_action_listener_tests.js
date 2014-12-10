@@ -265,7 +265,7 @@ describe('GitActionListener', function () {
         it('loads application with correct params', function () {
           expect(Application.findOneAsync)
             .to.have.been.calledWith({
-              gitRepo: 'app',
+              slug: 'app',
               organisation: 'orgid'
             });
         });
