@@ -298,7 +298,8 @@ describe('GitDeployer', function () {
   describe('#updateSchedules', function () {
     var stubJob = {
       save: sinon.stub().callsArg(0),
-      repeatEvery: sinon.stub()
+      repeatEvery: sinon.stub(),
+      computeNextRunAt: sinon.stub()
     };
     before(function () {
       sinon.stub(Agenda.prototype, 'cancel').callsArgWith(1, null, 1);
