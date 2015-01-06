@@ -1,5 +1,5 @@
 'use strict';
-
+process.title = 'git-listener';
 var server = require('./lib/server');
 
 process.on('message', function (msg) {
