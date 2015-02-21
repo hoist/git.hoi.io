@@ -1,4 +1,4 @@
-'use strict';
+  'use strict';
 
 require('../bootstrap');
 var moment = require('moment');
@@ -215,7 +215,6 @@ describe('GitDeployer', function () {
   });
   describe('#deploy', function () {
     var deployer;
-    var callback = sinon.stub();
     var job = {};
     var logStub = sinon.stub();
     var clock;
@@ -225,12 +224,12 @@ describe('GitDeployer', function () {
       deployer = new GitDeployer();
       var p = BBPromise.resolve(null);
       sinon.stub(deployer, 'checkout').returns(p);
-      sinon.stub(deployer, 'updateConfig').returns(p);
+      sinon.stub(deployer, 'updateConfig').returns([p]);
       sinon.stub(deployer, 'npm').returns(p);
       sinon.stub(deployer, 'updateSchedules').returns(p);
       sinon.stub(deployer, 'clearOldDirectories').returns(p);
       sinon.stub(deployer, 'deployFiles').returns(p);
-      deployer.deploy(job, logStub, logStub, callback).then(done);
+      return deployer.deploy(job, logStub, logStub, done);
     });
     after(function () {
       clock.restore();
@@ -250,11 +249,6 @@ describe('GitDeployer', function () {
     it('creates job log', function () {
 
       return expect(logStub)
-        .to.have.been.called;
-    });
-    it('completes', function () {
-
-      return expect(callback)
         .to.have.been.called;
     });
   });
