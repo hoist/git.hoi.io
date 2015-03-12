@@ -1,5 +1,5 @@
 'use strict';
-
+process.title = 'git-deployer';
 var Deployer = require('./lib/git_deployer');
 var deployer = new Deployer();
 process.on('message', function (msg) {
