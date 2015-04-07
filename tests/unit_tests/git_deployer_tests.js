@@ -150,6 +150,9 @@ describe('GitDeployer', function () {
       before(function () {
         var GitDeployer = require('../../lib/git_deployer');
         var deployer = new GitDeployer();
+        sinon.stub(Organisation, 'findOneAsync').returns(BBPromise.resolve({
+          _id: 'abc'
+        }));
         sinon.stub(Application, 'findOneAsync').returns(BBPromise.resolve({
           _id: 'abc'
         }));
@@ -168,6 +171,7 @@ describe('GitDeployer', function () {
       });
       after(function() {
         Application.findOneAsync.restore();
+        Organisation.findOneAsync.restore();
       });
     });
   });
