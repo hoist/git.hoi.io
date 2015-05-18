@@ -29,11 +29,11 @@ describe('post-receive hook', function () {
   });
   it('logs message sent to first function', function () {
     /* jshint -W030 */
-    sinon.stub(console, 'log');
+    sinon.stub(process.stdout, 'write');
     stubRemote.deploy.callArgWith(1, 'this is a message');
-    expect(console.log)
-      .to.have.been.calledWith('this is a message');
-    console.log.restore();
+    expect(process.stdout.write)
+      .to.have.been.calledWith('\x1b[1Gthis is a message\n');
+    process.stdout.write.restore();
   });
   it('calls deploy', function () {
     expect(stubRemote.deploy)

@@ -1,0 +1,3 @@
+#!/bin/bash
+
+node "/Volumes/Store/Projects/hoist/hoist-git-listener/lib/hook.js" | stdbuf -i0 -o0 -e0 sed "s/^/"$'\e[1G'"/";
