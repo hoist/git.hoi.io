@@ -13,6 +13,7 @@ var config = require('config');
 var rmdirRecursive = require('rmdir-recursive');
 var Application = require('hoist-model').Application;
 var Organisation = require('hoist-model').Organisation;
+var ExecutionLogEvent = require('hoist-model').ExecutionLogEvent;
 var mongoose = require('hoist-model')._mongoose;
 var _ = require('lodash');
 var dnode = require('dnode');
@@ -142,6 +143,38 @@ describe('GitDeployer', function () {
       });
     });
   });
+  describe('#logToDeveloperConsole', function () {
+    describe('using a full path', function () {
+      var parsed;
+      var job;
+      before(function () {
+        var GitDeployer = require('../../lib/git_deployer');
+        var deployer = new GitDeployer();
+        sinon.stub(Organisation, 'findOneAsync').returns(BBPromise.resolve({
+          _id: 'abc'
+        }));
+        sinon.stub(Application, 'findOneAsync').returns(BBPromise.resolve({
+          _id: 'abc'
+        }));
+        sinon.stub(ExecutionLogEvent.prototype, 'saveAsync').returns(BBPromise.resolve({}));
+        job = {
+          path: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook.git')
+        };
+        parsed = deployer.logToDeveloperConsole('Deploy', job);
+      });
+      it('returns job', function () {
+        return parsed.then(function (returnedJob) {
+          console.log(returnedJob);
+          expect(returnedJob.path)
+            .to.eql(job.path);
+        });
+      });
+      after(function() {
+        Application.findOneAsync.restore();
+        Organisation.findOneAsync.restore();
+      });
+    });
+  });
   describe('#updateConfig', function () {
     describe('with a valid save', function () {
       var application = new Application({
@@ -229,6 +262,7 @@ describe('GitDeployer', function () {
       sinon.stub(deployer, 'updateSchedules').returns(p);
       sinon.stub(deployer, 'clearOldDirectories').returns(p);
       sinon.stub(deployer, 'deployFiles').returns(p);
+      sinon.stub(deployer, 'logToDeveloperConsole').returns(p);
       return deployer.deploy(job, logStub, logStub, done);
     });
     after(function () {
