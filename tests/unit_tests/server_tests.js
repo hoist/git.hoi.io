@@ -31,7 +31,7 @@ describe('server', function () {
       });
       it('disconnects mongo', function () {
         /* jshint -W030 */
-        expect(mongoose.disconnect)
+        return expect(mongoose.disconnect)
           .to.have.been.called;
       });
     });
@@ -67,23 +67,23 @@ describe('server', function () {
       });
       it('doesn\'t reconnect to mongo', function () {
         /*jshint -W030 */
-        expect(mongoose.connect)
+        return expect(mongoose.connect)
           .to.have
           .not.been.called;
       });
       it('creates a server', function () {
         /* jshint -W030 */
-        expect(http.createServer)
+        return expect(http.createServer)
           .to.have.been.called;
       });
       it('listens', function () {
         /* jshint -W030 */
-        expect(server.listen)
+        return expect(server.listen)
           .to.have.been.called;
       });
       it('binds to repository', function () {
         /* jshint -W030 */
-        expect(GitActionListener.prototype.bindToRepository)
+        return expect(GitActionListener.prototype.bindToRepository)
           .to.have.been.called;
       });
     });
@@ -114,17 +114,17 @@ describe('server', function () {
       });
       it('creates a server', function () {
         /* jshint -W030 */
-        expect(http.createServer)
+        return expect(http.createServer)
           .to.have.been.called;
       });
       it('listens', function () {
         /* jshint -W030 */
-        expect(server.listen)
+        return expect(server.listen)
           .to.have.been.called;
       });
       it('binds to repository', function () {
         /* jshint -W030 */
-        expect(GitActionListener.prototype.bindToRepository)
+        return expect(GitActionListener.prototype.bindToRepository)
           .to.have.been.called;
       });
       describe('on request', function () {

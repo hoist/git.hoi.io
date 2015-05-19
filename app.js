@@ -1,6 +1,8 @@
 'use strict';
+require("babel/register");
 process.title = 'git-listener';
 var server = require('./lib/server');
+
 
 process.on('message', function (msg) {
   console.log('got message', msg, msg === 'shutdown');

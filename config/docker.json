@@ -1,0 +1,20 @@
+{
+  "Hoist": {
+    "filePaths": {
+      "repositories": "/var/repositories",
+      "tmp": "/tmp",
+      "deploys": "/var/deploys",
+      "connectors": "/var/connectors",
+      "secrets": "/var/secrets"
+    },
+    "mongo": {
+      "core": {
+        "connectionString": "mongodb://db/hoist-default",
+        "oplog": "mongodb://db/local"
+      }
+    },
+    "redis": {
+      "core": "redis"
+    }
+  }
+}

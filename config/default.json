@@ -4,30 +4,22 @@
       "name": "hoist-git-listener"
     },
     "debug": true,
-    "kue": {
-      "host": "localhost",
-      "port": 6379,
-      "db": 4
+    "server": {
+      "host": "0.0.0.0",
+      "port": 8000
     },
-    "http": {
-      "port": 7000
-    },
-    "git": {
-      "repositories": "/tmp/repos",
-      "checkoutTmpDir": "./tests/fixtures/checkouts"
+    "filePaths": {
+      "repositories": "/var/repositories",
+      "tmp": "/tmp",
+      "deploys": "/var/deploys"
     },
     "mongo": {
-      "db": "mongodb://localhost/hoist-default"
+      "core": {
+        "connectionString": "mongodb://localhost/hoist-default"
+      }
     },
     "security": {
-      "passwordStrength": 12
-    },
-    "dnode": {
-      "port": 8948
-    },
-
-    "executor": {
-      "root": "./tests/fixtures/deploys"
+      "passwordStrength": 5
     }
   }
 }
