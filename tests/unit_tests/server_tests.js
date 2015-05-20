@@ -39,7 +39,7 @@ describe('server', function () {
   describe('#start', function () {
     describe('with active connection', function () {
       var server = {
-        listen: sinon.stub().callsArg(1)
+        listen: sinon.stub().callsArg(2)
       };
       var _repos;
       var _originalConnections;
@@ -89,7 +89,7 @@ describe('server', function () {
     });
     describe('with no active connection', function () {
       var server = {
-        listen: sinon.stub().callsArg(1)
+        listen: sinon.stub().callsArg(2)
       };
       var _repos;
       before(function (done) {
