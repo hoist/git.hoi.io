@@ -22,7 +22,7 @@ WORKDIR /usr/src/app
 ENV NPM_CONFIG_LOGLEVEL=warn
 
 #install global packages
-RUN npm install -g nodemon && npm install -g babel
+RUN npm install -g nodemon && npm install -g babel && npm install -g gulp
 
 ADD package.json /usr/src/app/package.json
 RUN npm install

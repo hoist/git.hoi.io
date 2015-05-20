@@ -5,7 +5,7 @@ var expect = require('chai').expect;
 var http = require('http');
 var BBPromise = require('bluebird');
 var GitActionListener = require('../../lib/git_action_listener');
-var mongoose = require('hoist-model')._mongoose;
+var mongoose = require('@hoist/model')._mongoose;
 var hoistServer = require('../../lib/server');
 
 describe('server', function () {
