@@ -42,4 +42,4 @@ deployment:
       - docker push quay.io/hoist/git-receiver:${CIRCLE_BRANCH//feature\//}
 notify:
   webhooks:
-    - url: https://overlord.hoist.io/api/webhook/circlci?api_token=xc1zrzacmxp9samlj9nya4gzay
+    - url: https://overlord.hoist.io/api/webhook/circleci?api_token=xc1zrzacmxp9samlj9nya4gzay
