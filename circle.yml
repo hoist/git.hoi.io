@@ -23,7 +23,10 @@ dependencies:
     - docker save "quay.io/hoist/git-receiver" > ~/docker/git-receiver.tar
 test:
   override:
-    - docker run --entrypoint gulp quay.io/hoist/git-receiver:${CIRCLE_BRANCH//feature\//} test
+    - docker kill test; true;
+    - docker rm test; true;
+    - docker run --name test --entrypoint gulp quay.io/hoist/git-receiver:${CIRCLE_BRANCH//feature\//} test
+    - docker cp test:/usr/src/app/coverage ~/
 general:
   artifacts:
     - coverage/*
@@ -39,5 +42,4 @@ deployment:
       - docker push quay.io/hoist/git-receiver:${CIRCLE_BRANCH//feature\//}
 notify:
   webhooks:
-    # A list of hook hashes, containing the url field
-    - url: https://overlord.hoist.io/api/webhook/circlci?api_token=$HOIST_API_TOKEN
+    - url: https://overlord.hoist.io/api/webhook/circlci?api_token=xc1zrzacmxp9samlj9nya4gzay
