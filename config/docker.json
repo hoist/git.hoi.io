@@ -1,11 +1,8 @@
 {
   "Hoist": {
     "filePaths": {
-      "repositories": "/var/repositories",
-      "tmp": "/tmp",
-      "deploys": "/var/deploys",
-      "connectors": "/var/connectors",
-      "secrets": "/var/secrets"
+      "repositories": "/shares/repositories",
+      "deploys": "/shares/deploys"
     },
     "mongo": {
       "core": {

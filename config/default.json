@@ -9,9 +9,8 @@
       "port": 8000
     },
     "filePaths": {
-      "repositories": "/var/repositories",
-      "tmp": "/tmp",
-      "deploys": "/var/deploys"
+      "repositories": "/shares/repositories",
+      "deploys": "/shares/deploys"
     },
     "mongo": {
       "core": {
