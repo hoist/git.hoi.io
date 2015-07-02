@@ -1,9 +1,5 @@
 {
   "Hoist": {
-    "filePaths": {
-      "repositories": "/shares/repositories",
-      "deploys": "/shares/deploys"
-    },
     "mongo": {
       "core": {
         "connectionString": "mongodb://db/hoist-default",
