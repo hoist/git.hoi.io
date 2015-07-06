@@ -1,0 +1,17 @@
+[Unit]
+Description=git.hoi.io service
+After=config.service
+
+[Service]
+User=core
+Restart=always
+ExecStartPre=-/usr/bin/docker kill git.hoi.io-%i
+ExecStartPre=-/usr/bin/docker rm git.hoi.io-%i
+ExecStartPre=-/usr/bin/docker pull quay.io/hoist/git.hoi.io:docker
+ExecStart=/usr/bin/docker run --name git.hoi.io-%i  -e "SERVICE_TAGS=http,nodejs,git,production,https-hoi-io" -e "SERVICE_NAME=git" -e "NODE_ENV=production" --volumes-from config -P quay.io/hoist/git.hoi.io:docker
+ExecStop=/usr/bin/docker stop git.hoi.io-%i
+TimeoutStartSec=30m
+
+[X-Fleet]
+Conflicts=git.hoi.io@*.service
+MachineMetadata=container_type=web
