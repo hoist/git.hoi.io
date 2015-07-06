@@ -109,10 +109,13 @@ class GitActionListener {
       }).then(() =&gt; {
         push.accept();
       }).catch((err) =&gt; {
-        console.log(err.code);
+        let errCode = 500;
+        if (err.code) {
+          errCode = parseInt(err.code);
+        }
         this._logger.error(err);
         logger.alert(err);
-        push.reject(err.code || 500, err.message);
+        push.reject(errCode, err.message);
       });
   }
 
@@ -122,7 +125,7 @@ class GitActionListener {
     auth = req.headers.authorization;
     if (!auth) {
       this._logger.warn(&quot;no auth header present&quot;);
-      return Promise.reject(new Error(&apos;Bad request&apos;));
+      return Promise.reject(new errors.Http401Error(&apos;Missing Authentication Header&apos;));
     } else {
       this._logger.info({
         authHeader: auth
@@ -152,7 +155,7 @@ class GitActionListener {
       .then((user) =&gt; {
         if (!user) {
           throw new errors.Http401Error({
-            message: &apos;incorrect Username or password provided&apos;
+            message: &apos;Incorrect username or password provided&apos;
           });
         }
         // check if user is in organisation
@@ -165,7 +168,7 @@ class GitActionListener {
       }).then((org) =&gt; {
         if (!org) {
           this._logger.warn(&apos;unable to load organisation&apos;);
-          throw new errors.Http500Error(&apos;No matching organisation found&apos;);
+          throw new errors.Http401Error(`The specified user doesn&apos;t have access to this repository, or the repository doesn&apos;t exist`);
         }
         this._logger.info({
           org: org._id
@@ -179,7 +182,7 @@ class GitActionListener {
       }).then((app) =&gt; {
         if (!app) {
           this._logger.warn(&apos;unable to load application&apos;);
-          throw new errors.Http500Error(&apos;No matching application found&apos;);
+          throw new errors.Http401Error(`The specified user doesn&apos;t have access to this repository, or the repository doesn&apos;t exist`);
         }
         this._logger.info({
           app: app._id

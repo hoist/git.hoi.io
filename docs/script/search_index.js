@@ -336,6 +336,126 @@ window.esdocSearchIndex = [
     "external"
   ],
   [
+    "gitactionlistener lib/git_action_listener.js~gitactionlistener,gitactionlistener",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber15",
+    "GitActionListener",
+    "test"
+  ],
+  [
+    "gitactionlistener#bindtorepository lib/git_action_listener.js~gitactionlistener#bindtorepository,gitactionlistener#bindtorepository",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber21",
+    "GitActionListener GitActionListener#bindToRepository",
+    "test"
+  ],
+  [
+    "",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber32",
+    "GitActionListener GitActionListener#bindToRepository binds push event to the #push method",
+    "test"
+  ],
+  [
+    "gitactionlistener#createhookfile lib/git_action_listener.js~gitactionlistener#createhookfile,gitactionlistener#createhookfile",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber43",
+    "GitActionListener GitActionListener#createHookFile",
+    "test"
+  ],
+  [
+    "",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber49",
+    "GitActionListener GitActionListener#createHookFile should create link to hook-file",
+    "test"
+  ],
+  [
+    "",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber54",
+    "GitActionListener GitActionListener#push",
+    "test"
+  ],
+  [
+    "",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber100",
+    "GitActionListener GitActionListener#push if has access to repository",
+    "test"
+  ],
+  [
+    "",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber108",
+    "GitActionListener GitActionListener#push if has access to repository accepts the push",
+    "test"
+  ],
+  [
+    "",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber137",
+    "GitActionListener GitActionListener#push if has access to repository creates the hook file",
+    "test"
+  ],
+  [
+    "",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber130",
+    "GitActionListener GitActionListener#push if has access to repository queries correct application",
+    "test"
+  ],
+  [
+    "",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber111",
+    "GitActionListener GitActionListener#push if has access to repository queries for lower lower case email addres",
+    "test"
+  ],
+  [
+    "",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber121",
+    "GitActionListener GitActionListener#push if has access to repository queries for organisation user has access to",
+    "test"
+  ],
+  [
+    "",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber189",
+    "GitActionListener GitActionListener#push if password is wrong",
+    "test"
+  ],
+  [
+    "",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber200",
+    "GitActionListener GitActionListener#push if password is wrong rejects the push with a 401 error",
+    "test"
+  ],
+  [
+    "",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber144",
+    "GitActionListener GitActionListener#push if push is made without auth header",
+    "test"
+  ],
+  [
+    "",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber155",
+    "GitActionListener GitActionListener#push if push is made without auth header rejects the push with a 401 error",
+    "test"
+  ],
+  [
+    "",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber160",
+    "GitActionListener GitActionListener#push if user doesn't have access to repository",
+    "test"
+  ],
+  [
+    "",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber169",
+    "GitActionListener GitActionListener#push if user doesn't have access to repository rejects the push with a 401 error",
+    "test"
+  ],
+  [
+    "",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber174",
+    "GitActionListener GitActionListener#push if username is wrong",
+    "test"
+  ],
+  [
+    "",
+    "test-file/tests/unit_tests/git_action_listener_tests.js.html#lineNumber184",
+    "GitActionListener GitActionListener#push if username is wrong rejects the push with a 401 error",
+    "test"
+  ],
+  [
     "lib/deployer.js",
     "file/lib/deployer.js.html",
     "lib/deployer.js",
