@@ -318,7 +318,7 @@ class Deployer {
     }).then(() =&gt; {
       if (this.application.settings.live.schedules) {
         return Bluebird.all(_.map(this.application.settings.live.schedules, (schedule, key) =&gt; {
-          var scheduleJob = Bluebird.promisifyAll(this.agenda.create(&apos;create:event&apos;, {
+          var scheduleJob = Bluebird.promisifyAll(this.agenda.create(&apos;create:event2&apos;, {
             application: this.application._id,
             environment: &apos;live&apos;,
             events: schedule.events
