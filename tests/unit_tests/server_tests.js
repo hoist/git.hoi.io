@@ -110,7 +110,7 @@ describe('server', function () {
       });
       it('connects to mongo', function () {
         expect(mongoose.connect)
-          .to.have.been.calledWith('mongodb://localhost/hoist-default');
+          .to.have.been.calledWith('mongodb://db/hoist-default');
       });
       it('creates a server', function () {
         /* jshint -W030 */

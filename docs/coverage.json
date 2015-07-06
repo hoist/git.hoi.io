@@ -1,0 +1,11 @@
+{
+  "coverage": "0%",
+  "expectCount": 9,
+  "actualCount": 0,
+  "files": {
+    "lib/git_action_listener.js": {
+      "expectCount": 9,
+      "actualCount": 0
+    }
+  }
+}

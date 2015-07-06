@@ -1,7 +1,7 @@
 {
   "Hoist": {
     "application": {
-      "name": "hoist-git-listener"
+      "name": "git.hoi.io"
     },
     "debug": true,
     "server": {
@@ -9,12 +9,12 @@
       "port": 8000
     },
     "filePaths": {
-      "repositories": "/shares/repositories",
+      "repositories": "/shares/repos",
       "deploys": "/shares/deploys"
     },
     "mongo": {
       "core": {
-        "connectionString": "mongodb://localhost/hoist-default"
+        "connectionString": "mongodb://db/hoist-default"
       }
     },
     "security": {

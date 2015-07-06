@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <base data-ice="baseUrl" href="../../">
+  <title data-ice="title">lib/git_action_listener.js | API Document</title>
+  <link type="text/css" rel="stylesheet" href="css/style.css">
+  <link type="text/css" rel="stylesheet" href="css/prettify-tomorrow.css">
+  <script src="script/prettify/prettify.js"></script>
+  
+  
+</head>
+<body class="layout-container">
+
+<header>
+  <a href="./">Home</a>
+  <a href="identifiers.html">Identifier</a>
+  <a href="source.html">Source</a>
+  <a href="test.html" data-ice="testLink">Test</a>
+  <a data-ice="repoURL" href="https://github.com/hoist/hoist-git-listener.git" class="repo-url-github">Repository</a>
+  <div class="search-box">
+  <span>
+    <img src="./image/search.png">
+    <span class="search-input-edge"></span><input class="search-input"><span class="search-input-edge"></span>
+  </span>
+    <ul class="search-result"></ul>
+  </div>
+</header>
+
+<nav class="navigation" data-ice="nav"><div data-ice="classWrap">
+  <h2>Class</h2>
+  <ul>
+    
+  <li data-ice="classDoc"><span><a href="class/lib/git_action_listener.js~GitActionListener.html">GitActionListener</a></span></li>
+</ul>
+</div>
+
+
+
+
+
+<div data-ice="variableWrap">
+  <h2><a href="variable/">Variable</a></h2>
+  <ul>
+    
+  <li data-ice="variableDoc"><span><a href="variable/index.html#static-variable-gitActionListener">gitActionListener</a></span></li>
+</ul>
+</div>
+
+
+
+
+</nav>
+
+<div class="content" data-ice="content"><h1 data-ice="title">lib/git_action_listener.js</h1>
+<pre class="source-code line-number"><code class="prettyprint linenums" data-ice="content">&apos;use strict&apos;;
+import path from &apos;path&apos;;
+import fs from &apos;fs&apos;;
+import {
+  HoistUser, Organisation, Application
+}
+from &apos;@hoist/model&apos;;
+import logger from &apos;@hoist/logger&apos;;
+import errors from &apos;@hoist/errors&apos;;
+import Bluebird from &apos;bluebird&apos;;
+
+Bluebird.promisifyAll(fs);
+
+var hookFile = path.resolve(__dirname, &apos;./hook-include.sh&apos;);
+
+class GitActionListener {
+  constructor() {
+    this._logger = logger.child({
+      cls: this.constructor.name
+    });
+  }
+  bindToRepository(repos) {
+    this._logger.info(&apos;binding to repository&apos;);
+    repos.on(&apos;push&apos;, (push) =&gt; {
+      return this.push(push);
+    });
+
+  }
+
+  createHookFile(template, target) {
+    this._logger.info(&apos;creating hook file&apos;);
+    return fs.readFileAsync(template, {
+      encoding: &apos;utf8&apos;
+    }).then((content) =&gt; {
+      content = content.replace(&apos;#{dirname}&apos;, path.resolve(__dirname));
+      return fs.writeFileAsync(target, content, {
+        mode: &apos;0755&apos;
+      });
+    });
+  }
+
+  push(push) {
+    this._logger.info(&quot;received git push&quot;);
+
+    return this.processSecurity(push, &apos;push&apos;)
+      .then((gitObject) =&gt; {
+        this._logger.info(&quot;security processed&quot;);
+        let postReceiveHookFile = path.resolve(gitObject.cwd, &apos;./hooks/post-receive&apos;);
+        fs.unlink(postReceiveHookFile, function () {
+          //throw away error as we don&apos;t care
+        });
+        let preRecieveHookFile = path.resolve(gitObject.cwd, &apos;./hooks/pre-receive&apos;);
+        return this.createHookFile(hookFile, preRecieveHookFile);
+      }).then(() =&gt; {
+        push.accept();
+      }).catch((err) =&gt; {
+        console.log(err.code);
+        this._logger.error(err);
+        logger.alert(err);
+        push.reject(err.code || 500, err.message);
+      });
+  }
+
+  processSecurity(gitObject, method) {
+    var auth, creds, plainAuth, req;
+    req = gitObject.request;
+    auth = req.headers.authorization;
+    if (!auth) {
+      this._logger.warn(&quot;no auth header present&quot;);
+      return Promise.reject(new Error(&apos;Bad request&apos;));
+    } else {
+      this._logger.info({
+        authHeader: auth
+      }, &quot;processing auth header&quot;);
+      plainAuth = new Buffer(auth.split(&apos; &apos;)[1], &apos;base64&apos;).toString();
+      this._logger.info({
+        plainHeader: plainAuth
+      }, &quot;processing plain header&quot;);
+      creds = plainAuth.split(&apos;:&apos;);
+      return this.permissableMethod(creds[0], creds[1], method, gitObject);
+    }
+  }
+
+  permissableMethod(username, password, method, gitObject) {
+    var repoSplit = gitObject.repo.split(&apos;/&apos;);
+
+    var gitRepo = repoSplit[1];
+    if (gitRepo.length &gt; 4) {
+      gitRepo = gitRepo.indexOf(&apos;.git&apos;) === gitRepo.length - 4 ? gitRepo.slice(0, -4) : gitRepo;
+    }
+    var gitFolder = repoSplit[0];
+    this._logger.info({
+      gitFolder: gitFolder,
+      gitRepo: gitRepo
+    }, &apos;git credentials&apos;);
+    return this.getUser(username, password)
+      .then((user) =&gt; {
+        if (!user) {
+          throw new errors.Http401Error({
+            message: &apos;incorrect Username or password provided&apos;
+          });
+        }
+        // check if user is in organisation
+        return Organisation.findOneAsync({
+          slug: gitFolder,
+          _id: {
+            $in: user.organisations
+          }
+        });
+      }).then((org) =&gt; {
+        if (!org) {
+          this._logger.warn(&apos;unable to load organisation&apos;);
+          throw new errors.Http500Error(&apos;No matching organisation found&apos;);
+        }
+        this._logger.info({
+          org: org._id
+        }, &apos;loaded organisation&apos;);
+        //check if organisation has application
+
+        return Application.findOneAsync({
+          slug: gitRepo,
+          organisation: org._id
+        });
+      }).then((app) =&gt; {
+        if (!app) {
+          this._logger.warn(&apos;unable to load application&apos;);
+          throw new errors.Http500Error(&apos;No matching application found&apos;);
+        }
+        this._logger.info({
+          app: app._id
+        }, &apos;loaded app&apos;);
+        return gitObject;
+      });
+  }
+
+  getUser(username, password) {
+    return HoistUser.findOneAsync({
+      emailAddresses: {
+        $elemMatch: {
+          address: username.toLowerCase()
+        }
+      }
+    }).then((user) =&gt; {
+      if (user) {
+        this._logger.info({
+          user: user._id
+        }, &apos;loaded user&apos;);
+      } else {
+        this._logger.warn(&apos;no user found&apos;);
+      }
+      if (user &amp;&amp; user.passwordHash &amp;&amp; user.passwordHash.length &gt; 0 &amp;&amp; user.verifyPassword(password)) {
+        return user;
+      } else if (user &amp;&amp; (!user.passwordHash || user.passwordHash.length &lt; 1)) {
+        this._logger.warn(&apos;user doesn\&apos;t have a password&apos;);
+        throw new errors.user.credentials.NoPasswordError();
+      } else {
+        this._logger.warn(&apos;user doesnt exist or password wrong&apos;);
+        return false;
+      }
+    });
+  }
+
+}
+
+
+
+export default GitActionListener;
+</code></pre>
+</div>
+
+<footer class="footer">
+  Generated by <a href="https://esdoc.org">ESDoc<span data-ice="esdocVersion">(0.1.3)</span></a>
+</footer>
+
+<script src="script/search_index.js"></script>
+<script src="script/search.js"></script>
+<script src="script/pretty-print.js"></script>
+<script src="script/inherited-summary.js"></script>
+<script src="script/test-summary.js"></script>
+<script src="script/inner-link.js"></script>
+<script src="script/patch-for-local.js"></script>
+</body>
+</html>
