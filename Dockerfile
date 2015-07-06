@@ -38,6 +38,6 @@ USER hoist
 
 EXPOSE 8000
 
-ENTRYPOINT ["nodemon", "--watch", "/config", "--exec"]
+ENTRYPOINT ["nodemon", "--exitcrash","--watch", "/config", "--exec"]
 
 CMD [ "./scripts/start.sh"]
