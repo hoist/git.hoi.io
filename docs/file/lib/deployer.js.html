@@ -116,7 +116,7 @@ class Deployer {
     })));
   }
   deploy() {
-    if (this.originalSha1 === &quot;0000000000000000000000000000000000000000&quot;) {
+    if (this.commitSha1 === &quot;0000000000000000000000000000000000000000&quot;) {
       //deleting branch
       return Promise.resolve();
     }
