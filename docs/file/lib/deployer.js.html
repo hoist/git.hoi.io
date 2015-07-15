@@ -139,12 +139,13 @@ class Deployer {
         return this.loadApplication();
       })
       .then(() =&gt; {
-        this.applicationEventLogger.log(new ExecutionLogEvent({
+        return this.applicationEventLogger.log(new ExecutionLogEvent({
           message: `Deploy starting. Hash: ${this.commitSha1}`,
           type: &apos;DEPLOY&apos;,
           application: this.application._id,
           environment: &apos;live&apos;
         }));
+      }).then(() =&gt; {
         return this.createArchive();
       }).then(() =&gt; {
         return this.deployArchive();
@@ -165,7 +166,7 @@ class Deployer {
         return this.clearOldDirectories();
       }).then(() =&gt; {
         if (this.application) {
-          this.applicationEventLogger.log(new ExecutionLogEvent({
+          return this.applicationEventLogger.log(new ExecutionLogEvent({
             message: `Deploy complete. Hash: ${this.commitSha1}`,
             type: &apos;DEPLOY&apos;,
             application: this.application._id,
@@ -173,18 +174,22 @@ class Deployer {
           }));
         }
       }).catch((err) =&gt; {
-        if (this.application) {
-          this.applicationEventLogger.log(new ExecutionLogEvent({
-            message: `Deploy failed. Hash: ${this.commitSha1}`,
-            type: &apos;DEPLOY&apos;,
-            application: this.application._id,
-            environment: &apos;live&apos;
-          }));
-        }
+
         console.log(err);
         return fs.removeAsync(this.getDeployPath())
           .catch(function () {}).then(function () {
-            throw err;
+            if (this.application) {
+              return this.applicationEventLogger.log(new ExecutionLogEvent({
+                message: `Deploy failed. Hash: ${this.commitSha1}`,
+                type: &apos;DEPLOY&apos;,
+                application: this.application._id,
+                environment: &apos;live&apos;
+              })).then(() =&gt; {
+                throw err;
+              });
+            } else {
+              throw err;
+            }
           });
       }).finally(() =&gt; {
         return this.closeDBConnection();
