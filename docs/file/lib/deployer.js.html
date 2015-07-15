@@ -60,7 +60,14 @@ import config from &apos;config&apos;;
 import path from &apos;path&apos;;
 import moment from &apos;moment&apos;;
 import Bluebird from &apos;bluebird&apos;;
-import model from &apos;@hoist/model&apos;;
+import {
+  _mongoose, Organisation, Application, ExecutionLogEvent
+}
+from &apos;@hoist/model&apos;;
+import {
+  ApplicationEventLogger
+}
+from &apos;@hoist/broker&apos;;
 import errors from &apos;@hoist/errors&apos;;
 import jsonlint from &apos;jsonlint&apos;;
 import Git from &apos;nodegit&apos;;
@@ -71,7 +78,7 @@ let fs = Bluebird.promisifyAll(require(&apos;fs-extra&apos;));
 let temp = Bluebird.promisifyAll(require(&apos;temp&apos;));
 let targz = Bluebird.promisifyAll(new Targz());
 let gitArchive = Bluebird.promisify(require(&apos;git-archive&apos;));
-let mongoose = Bluebird.promisifyAll(model._mongoose);
+Bluebird.promisifyAll(_mongoose);
 
 
 class Deployer {
@@ -82,7 +89,7 @@ class Deployer {
     this.originalSha1 = params[0];
     this.commitSha1 = params[1];
     this.branch = params[2];
-
+    this.applicationEventLogger = new ApplicationEventLogger();
     let subpath = process.cwd().replace(config.get(&apos;Hoist.filePaths.repositories&apos;), &apos;&apos;);
     subpath = subpath.replace(&apos;.git&apos;, &apos;&apos;);
 
@@ -122,6 +129,7 @@ class Deployer {
     }
     return this.printBanner()
       .then(() =&gt; {
+
         return this.openDBConnection();
       })
       .then(() =&gt; {
@@ -131,6 +139,12 @@ class Deployer {
         return this.loadApplication();
       })
       .then(() =&gt; {
+        this.applicationEventLogger.log(new ExecutionLogEvent({
+          message: `Deploy starting. Hash: ${this.commitSha1}`,
+          type: &apos;DEPLOY&apos;,
+          application: this.application._id,
+          environment: &apos;live&apos;
+        }));
         return this.createArchive();
       }).then(() =&gt; {
         return this.deployArchive();
@@ -149,11 +163,27 @@ class Deployer {
         process.stdout.write(&apos;\x1b[32mDeploy Completed Successfully\x1b[37m\n&apos;);
       }).then(() =&gt; {
         return this.clearOldDirectories();
+      }).then(() =&gt; {
+        if (this.application) {
+          this.applicationEventLogger.log(new ExecutionLogEvent({
+            message: `Deploy complete. Hash: ${this.commitSha1}`,
+            type: &apos;DEPLOY&apos;,
+            application: this.application._id,
+            environment: &apos;live&apos;
+          }));
+        }
       }).catch((err) =&gt; {
+        if (this.application) {
+          this.applicationEventLogger.log(new ExecutionLogEvent({
+            message: `Deploy failed. Hash: ${this.commitSha1}`,
+            type: &apos;DEPLOY&apos;,
+            application: this.application._id,
+            environment: &apos;live&apos;
+          }));
+        }
         console.log(err);
         return fs.removeAsync(this.getDeployPath())
           .catch(function () {}).then(function () {
-
             throw err;
           });
       }).finally(() =&gt; {
@@ -161,13 +191,13 @@ class Deployer {
       });
   }
   openDBConnection() {
-    return mongoose.connectAsync(config.get(&apos;Hoist.mongo.core.connectionString&apos;));
+    return _mongoose.connectAsync(config.get(&apos;Hoist.mongo.core.connectionString&apos;));
   }
   closeDBConnection() {
-    return mongoose.disconnectAsync();
+    return _mongoose.disconnectAsync();
   }
   loadOrganisation() {
-    return Bluebird.resolve(this.organisation || model.Organisation.findOneAsync({
+    return Bluebird.resolve(this.organisation || Organisation.findOneAsync({
       slug: this.organisationSlug
     })).then((organisation) =&gt; {
       this.organisation = organisation;
@@ -177,7 +207,7 @@ class Deployer {
   loadApplication() {
     return Bluebird.resolve(this.application || this.loadOrganisation()
       .then(() =&gt; {
-        return model.Application.findOneAsync({
+        return Application.findOneAsync({
           organisation: this.organisation._id,
           slug: this.applicationSlug
         });
