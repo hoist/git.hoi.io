@@ -60,13 +60,14 @@ import config from &apos;config&apos;;
 import path from &apos;path&apos;;
 import moment from &apos;moment&apos;;
 import Bluebird from &apos;bluebird&apos;;
+import uuid from &apos;uuid&apos;;
 import {
-  _mongoose, Organisation, Application, ExecutionLogEvent
+  _mongoose, Organisation, Application, ExecutionLogEvent, Event
 }
 from &apos;@hoist/model&apos;;
 import {
-  ApplicationEventLogger,
   NotificationLogger,
+  Publisher,
   Notification
 }
 from &apos;@hoist/broker&apos;;
@@ -91,7 +92,8 @@ class Deployer {
     this.originalSha1 = params[0];
     this.commitSha1 = params[1];
     this.branch = params[2];
-    this.applicationEventLogger = new ApplicationEventLogger();
+    this.publisher = new Publisher();
+    this.applicationEventLogger = this.publisher;
     this.notificationLogger = new NotificationLogger();
     let subpath = process.cwd().replace(config.get(&apos;Hoist.filePaths.repositories&apos;), &apos;&apos;);
     subpath = subpath.replace(&apos;.git&apos;, &apos;&apos;);
@@ -171,10 +173,20 @@ class Deployer {
       }).then(() =&gt; {
         return this.clearOldDirectories().catch(() =&gt; {});
       }).then(() =&gt; {
-        return this.notificationLogger.log(new Notification({
-          applicationId: this.application._id,
-          notificationType: &apos;Update&apos;
-        }));
+        return Promise.all([
+          this.notificationLogger.log(new Notification({
+            applicationId: this.application._id,
+            notificationType: &apos;Update&apos;
+          })),
+          this.publisher.publish(new Event({
+            eventId: uuid.v4().split(&apos;-&apos;).join(&apos;&apos;),
+            applicationId: this.application._id,
+            eventName: &apos;POST:DEPLOY&apos;,
+            environment: &apos;live&apos;,
+            correlationId: uuid.v4(),
+            payload: {}
+          }))
+        ]);
       }).then(() =&gt; {
         if (this.application) {
           return this.applicationEventLogger.log(new ExecutionLogEvent({
