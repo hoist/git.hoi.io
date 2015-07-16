@@ -65,7 +65,9 @@ import {
 }
 from &apos;@hoist/model&apos;;
 import {
-  ApplicationEventLogger
+  ApplicationEventLogger,
+  NotificationLogger,
+  Notification
 }
 from &apos;@hoist/broker&apos;;
 import errors from &apos;@hoist/errors&apos;;
@@ -90,6 +92,7 @@ class Deployer {
     this.commitSha1 = params[1];
     this.branch = params[2];
     this.applicationEventLogger = new ApplicationEventLogger();
+    this.notificationLogger = new NotificationLogger();
     let subpath = process.cwd().replace(config.get(&apos;Hoist.filePaths.repositories&apos;), &apos;&apos;);
     subpath = subpath.replace(&apos;.git&apos;, &apos;&apos;);
 
@@ -164,6 +167,11 @@ class Deployer {
         process.stdout.write(&apos;\x1b[32mDeploy Completed Successfully\x1b[37m\n&apos;);
       }).then(() =&gt; {
         return this.clearOldDirectories();
+      }).then(() =&gt; {
+        return this.notificationLogger.log(new Notification({
+          applicationId: this.application._id,
+          type: Notification.Types.Update
+        }));
       }).then(() =&gt; {
         if (this.application) {
           return this.applicationEventLogger.log(new ExecutionLogEvent({
