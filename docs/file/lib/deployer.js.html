@@ -170,7 +170,7 @@ class Deployer {
       }).then(() =&gt; {
         return this.notificationLogger.log(new Notification({
           applicationId: this.application._id,
-          type: Notification.Types.Update
+          notificationType: Notification.Types.Update
         }));
       }).then(() =&gt; {
         if (this.application) {
