@@ -126,6 +126,7 @@ class Deployer {
     })));
   }
   deploy() {
+    let deleteDeployDir = true;
     if (this.commitSha1 === &quot;0000000000000000000000000000000000000000&quot;) {
       //deleting branch
       return Promise.resolve();
@@ -155,8 +156,7 @@ class Deployer {
       }).then(() =&gt; {
         return this.npmInstall();
       }).then(() =&gt; {
-        return this.linkReleaseDirectory();
-      }).then(() =&gt; {
+
         console.log(&apos;updating config&apos;);
         return this.updateConfig();
       }).then(() =&gt; {
@@ -164,13 +164,16 @@ class Deployer {
       }).then(() =&gt; {
         return this.application.saveAsync();
       }).then(() =&gt; {
+        return this.linkReleaseDirectory();
+      }).then(() =&gt; {
+        deleteDeployDir = false;
         process.stdout.write(&apos;\x1b[32mDeploy Completed Successfully\x1b[37m\n&apos;);
       }).then(() =&gt; {
-        return this.clearOldDirectories();
+        return this.clearOldDirectories().catch(() =&gt; {});
       }).then(() =&gt; {
         return this.notificationLogger.log(new Notification({
           applicationId: this.application._id,
-          notificationType: Notification.Types.Update
+          notificationType: &apos;Update&apos;
         }));
       }).then(() =&gt; {
         if (this.application) {
@@ -182,22 +185,26 @@ class Deployer {
           }));
         }
       }).catch((err) =&gt; {
-
-        console.log(err);
-        return fs.removeAsync(this.getDeployPath())
-          .catch(function () {}).then(function () {
+        console.error(err);
+        return Promise.resolve()
+          .then(() =&gt; {
             if (this.application) {
               return this.applicationEventLogger.log(new ExecutionLogEvent({
                 message: `Deploy failed. Hash: ${this.commitSha1}`,
                 type: &apos;DEPLOY&apos;,
                 application: this.application._id,
                 environment: &apos;live&apos;
-              })).then(() =&gt; {
-                throw err;
-              });
-            } else {
-              throw err;
+              }));
             }
+          }).then(() =&gt; {
+            if (deleteDeployDir) {
+              return fs.removeAsync(this.getDeployPath())
+                .catch((err2) =&gt; {
+                  console.error(err2);
+                });
+            }
+          }).then(() =&gt; {
+            throw err;
           });
       }).finally(() =&gt; {
         return this.closeDBConnection();
