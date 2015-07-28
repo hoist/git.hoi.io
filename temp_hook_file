@@ -1,0 +1,5 @@
+#!/bin/bash
+set -e
+
+node "/Volumes/Storage/Projects/Hoist/git.hoi.io/lib/hook.js" | stdbuf -i0 -o0 -e0 sed "s/^/"$'\e[1G'"/";
+exit ${PIPESTATUS[0]};

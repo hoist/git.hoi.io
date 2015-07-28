@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <base data-ice="baseUrl" href="../../../">
+  <title data-ice="title">tests/unit_tests/server_tests.js | API Document</title>
+  <link type="text/css" rel="stylesheet" href="css/style.css">
+  <link type="text/css" rel="stylesheet" href="css/prettify-tomorrow.css">
+  <script src="script/prettify/prettify.js"></script>
+  
+  
+</head>
+<body class="layout-container">
+
+<header>
+  <a href="./">Home</a>
+  <a href="identifiers.html">Identifier</a>
+  <a href="source.html">Source</a>
+  <a href="test.html" data-ice="testLink">Test</a>
+  <a data-ice="repoURL" href="https://github.com/hoist/hoist-git-listener.git" class="repo-url-github">Repository</a>
+  <div class="search-box">
+  <span>
+    <img src="./image/search.png">
+    <span class="search-input-edge"></span><input class="search-input"><span class="search-input-edge"></span>
+  </span>
+    <ul class="search-result"></ul>
+  </div>
+</header>
+
+<nav class="navigation" data-ice="nav"><div data-ice="classWrap">
+  <h2>Class</h2>
+  <ul>
+    
+  <li data-ice="classDoc"><span><a href="class/lib/git_action_listener.js~GitActionListener.html">GitActionListener</a></span></li>
+</ul>
+</div>
+
+
+
+
+
+<div data-ice="variableWrap">
+  <h2><a href="variable/">Variable</a></h2>
+  <ul>
+    
+  <li data-ice="variableDoc"><span><a href="variable/index.html#static-variable-gitActionListener">gitActionListener</a></span></li>
+</ul>
+</div>
+
+
+
+
+</nav>
+
+<div class="content" data-ice="content"><h1 data-ice="title">tests/unit_tests/server_tests.js</h1>
+<pre class="source-code line-number"><code class="prettyprint linenums" data-ice="content">&apos;use strict&apos;;
+require(&apos;../bootstrap&apos;);
+var sinon = require(&apos;sinon&apos;);
+var expect = require(&apos;chai&apos;).expect;
+var http = require(&apos;http&apos;);
+var BBPromise = require(&apos;bluebird&apos;);
+var GitActionListener = require(&apos;../../lib/git_action_listener&apos;);
+var mongoose = require(&apos;@hoist/model&apos;)._mongoose;
+var hoistServer = require(&apos;../../lib/server&apos;);
+
+describe(&apos;server&apos;, function () {
+  describe(&apos;#stop&apos;, function () {
+    describe(&apos;with active mongo connection&apos;, function () {
+      var server = {
+        close: sinon.stub().callsArg(0)
+      };
+      var _originalConnections;
+      before(function (done) {
+        sinon.stub(mongoose, &apos;disconnect&apos;).callsArg(0);
+        _originalConnections = mongoose.connections;
+        mongoose.connections = [];
+        mongoose.connections.push({
+          readyState: 1
+        });
+        hoistServer._server = BBPromise.promisifyAll(server);
+        hoistServer.stop(done);
+      });
+      after(function () {
+        delete hoistServer._server;
+        mongoose.connections = _originalConnections;
+      });
+      it(&apos;disconnects mongo&apos;, function () {
+        /* jshint -W030 */
+        return expect(mongoose.disconnect)
+          .to.have.been.called;
+      });
+    });
+  });
+  describe(&apos;#start&apos;, function () {
+    describe(&apos;with active connection&apos;, function () {
+      var server = {
+        listen: sinon.stub().callsArg(2)
+      };
+      var _repos;
+      var _originalConnections;
+      before(function (done) {
+        sinon.stub(GitActionListener.prototype, &apos;bindToRepository&apos;, function (repos) {
+          _repos = repos;
+          sinon.stub(_repos, &apos;handle&apos;);
+        });
+        sinon.stub(mongoose, &apos;connect&apos;).callsArg(1);
+        sinon.stub(http, &apos;createServer&apos;).returns(server);
+        _originalConnections = mongoose.connections;
+        mongoose.connections = [];
+        mongoose.connections.push({
+          readyState: 1
+        });
+        hoistServer.start(done);
+      });
+      after(function () {
+        delete hoistServer._server;
+        http.createServer.restore();
+        mongoose.connect.restore();
+        mongoose.connections = _originalConnections;
+        GitActionListener.prototype.bindToRepository.restore();
+        _repos.handle.restore();
+      });
+      it(&apos;doesn\&apos;t reconnect to mongo&apos;, function () {
+        /*jshint -W030 */
+        return expect(mongoose.connect)
+          .to.have
+          .not.been.called;
+      });
+      it(&apos;creates a server&apos;, function () {
+        /* jshint -W030 */
+        return expect(http.createServer)
+          .to.have.been.called;
+      });
+      it(&apos;listens&apos;, function () {
+        /* jshint -W030 */
+        return expect(server.listen)
+          .to.have.been.called;
+      });
+      it(&apos;binds to repository&apos;, function () {
+        /* jshint -W030 */
+        return expect(GitActionListener.prototype.bindToRepository)
+          .to.have.been.called;
+      });
+    });
+    describe(&apos;with no active connection&apos;, function () {
+      var server = {
+        listen: sinon.stub().callsArg(2)
+      };
+      var _repos;
+      before(function (done) {
+        sinon.stub(GitActionListener.prototype, &apos;bindToRepository&apos;, function (repos) {
+          _repos = repos;
+          sinon.stub(_repos, &apos;handle&apos;);
+        });
+        sinon.stub(mongoose, &apos;connect&apos;).callsArg(1);
+        sinon.stub(http, &apos;createServer&apos;).returns(server);
+        hoistServer.start(done);
+      });
+      after(function () {
+        delete hoistServer._server;
+        http.createServer.restore();
+        mongoose.connect.restore();
+        GitActionListener.prototype.bindToRepository.restore();
+        _repos.handle.restore();
+      });
+      it(&apos;connects to mongo&apos;, function () {
+        expect(mongoose.connect)
+          .to.have.been.calledWith(&apos;mongodb://db/hoist-default&apos;);
+      });
+      it(&apos;creates a server&apos;, function () {
+        /* jshint -W030 */
+        return expect(http.createServer)
+          .to.have.been.called;
+      });
+      it(&apos;listens&apos;, function () {
+        /* jshint -W030 */
+        return expect(server.listen)
+          .to.have.been.called;
+      });
+      it(&apos;binds to repository&apos;, function () {
+        /* jshint -W030 */
+        return expect(GitActionListener.prototype.bindToRepository)
+          .to.have.been.called;
+      });
+      describe(&apos;on request&apos;, function () {
+        var req = {
+          headers: {
+            authorization: &apos;auth&apos;
+          }
+        };
+        var res = {};
+        before(function () {
+          http.createServer.callArgWith(0, req, res);
+        });
+        it(&apos;passes req and res to repos&apos;, function () {
+          expect(_repos.handle)
+            .to.have.been.calledWith(req, res);
+        });
+      });
+    });
+  });
+});
+</code></pre>
+</div>
+
+<footer class="footer">
+  Generated by <a href="https://esdoc.org">ESDoc<span data-ice="esdocVersion">(0.1.3)</span></a>
+</footer>
+
+<script src="script/search_index.js"></script>
+<script src="script/search.js"></script>
+<script src="script/pretty-print.js"></script>
+<script src="script/inherited-summary.js"></script>
+<script src="script/test-summary.js"></script>
+<script src="script/inner-link.js"></script>
+<script src="script/patch-for-local.js"></script>
+</body>
+</html>

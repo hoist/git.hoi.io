@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <base data-ice="baseUrl" href="../../../">
+  <title data-ice="title">tests/unit_tests/git_action_listener_tests.js | API Document</title>
+  <link type="text/css" rel="stylesheet" href="css/style.css">
+  <link type="text/css" rel="stylesheet" href="css/prettify-tomorrow.css">
+  <script src="script/prettify/prettify.js"></script>
+  
+  
+</head>
+<body class="layout-container">
+
+<header>
+  <a href="./">Home</a>
+  <a href="identifiers.html">Identifier</a>
+  <a href="source.html">Source</a>
+  <a href="test.html" data-ice="testLink">Test</a>
+  <a data-ice="repoURL" href="https://github.com/hoist/hoist-git-listener.git" class="repo-url-github">Repository</a>
+  <div class="search-box">
+  <span>
+    <img src="./image/search.png">
+    <span class="search-input-edge"></span><input class="search-input"><span class="search-input-edge"></span>
+  </span>
+    <ul class="search-result"></ul>
+  </div>
+</header>
+
+<nav class="navigation" data-ice="nav"><div data-ice="classWrap">
+  <h2>Class</h2>
+  <ul>
+    
+  <li data-ice="classDoc"><span><a href="class/lib/git_action_listener.js~GitActionListener.html">GitActionListener</a></span></li>
+</ul>
+</div>
+
+
+
+
+
+<div data-ice="variableWrap">
+  <h2><a href="variable/">Variable</a></h2>
+  <ul>
+    
+  <li data-ice="variableDoc"><span><a href="variable/index.html#static-variable-gitActionListener">gitActionListener</a></span></li>
+</ul>
+</div>
+
+
+
+
+</nav>
+
+<div class="content" data-ice="content"><h1 data-ice="title">tests/unit_tests/git_action_listener_tests.js</h1>
+<pre class="source-code line-number"><code class="prettyprint linenums" data-ice="content">&apos;use strict&apos;;
+import {
+  expect
+}
+from &apos;chai&apos;;
+import sinon from &apos;sinon&apos;;
+import GitActionListener from &apos;../../lib/git_action_listener&apos;;
+import path from &apos;path&apos;;
+import fs from &apos;fs&apos;;
+import {
+  HoistUser, Organisation, Application
+}
+from &apos;@hoist/model&apos;;
+/** @test {GitActionListener} */
+describe(&apos;GitActionListener&apos;, () =&gt; {
+  let gitActionListener;
+  before(() =&gt; {
+    gitActionListener = new GitActionListener();
+  });
+  /** @test {GitActionListener#bindToRepository} */
+  describe(&apos;GitActionListener#bindToRepository&apos;, () =&gt; {
+    let stubRepos = {
+      on: sinon.stub()
+    };
+    before(() =&gt; {
+      sinon.stub(gitActionListener, &apos;push&apos;);
+      gitActionListener.bindToRepository(stubRepos);
+    });
+    after(() =&gt; {
+      gitActionListener.push.restore();
+    });
+    it(&apos;binds push event to the #push method&apos;, () =&gt; {
+      let pushObject = {};
+      return Promise.resolve()
+        .then(() =&gt; {
+          stubRepos.on.yield(pushObject);
+        }).then(() =&gt; {
+          return expect(gitActionListener.push).to.have.been.calledWith(pushObject);
+        });
+    });
+  });
+  /** @test {GitActionListener#createHookFile} */
+  describe(&apos;GitActionListener#createHookFile&apos;, () =&gt; {
+    let target = &apos;temp_hook_file&apos;;
+    before(() =&gt; {
+      let template = path.resolve(__dirname, &apos;../../lib/hook-include.sh&apos;);
+      return gitActionListener.createHookFile(template, target);
+    });
+    it(&apos;should create link to hook-file&apos;, () =&gt; {
+      let hookCall = `node &quot;${path.resolve(__dirname, &apos;../../lib/hook.js&apos;)}&quot;`;
+      return expect(fs.readFileSync(target, &apos;utf8&apos;)).to.contain(hookCall);
+    });
+  });
+  describe(&apos;GitActionListener#push&apos;, () =&gt; {
+    let username = &apos;test@Hoist.io&apos;;
+    let password = &apos;test&apos;;
+    let mockPush = {
+      reject: sinon.stub(),
+      accept: sinon.stub(),
+      cwd: path.resolve(__dirname),
+      repo: &quot;org/app.git&quot;,
+      request: {
+        headers: {
+          authorization: &apos;Basic &apos; + new Buffer(username + &quot;:&quot; + password, &quot;utf8&quot;).toString(&quot;base64&quot;)
+        }
+      }
+    };
+    let organisation;
+    let application;
+    let user;
+    before(() =&gt; {
+      organisation = new Organisation({
+        _id: &apos;org-id&apos;,
+        slug: &apos;org&apos;
+      });
+      application = new Application({
+        organiation: organisation
+      });
+      user = new HoistUser({
+        emailAddresses: [{
+          address: username
+        }],
+        organisations: [organisation._id]
+      });
+
+      sinon.stub(HoistUser, &apos;findOneAsync&apos;).returns(Promise.resolve(user));
+      sinon.stub(Application, &apos;findOneAsync&apos;).returns(Promise.resolve(application));
+      sinon.stub(Organisation, &apos;findOneAsync&apos;).returns(Promise.resolve(organisation));
+      sinon.stub(gitActionListener, &apos;createHookFile&apos;);
+      sinon.stub(fs, &apos;unlink&apos;);
+      return user.setPassword(password);
+    });
+    after(() =&gt; {
+      fs.unlink.restore();
+      gitActionListener.createHookFile.restore();
+      Organisation.findOneAsync.restore();
+      Application.findOneAsync.restore();
+      HoistUser.findOneAsync.restore();
+    });
+    describe(&apos;if has access to repository&apos;, () =&gt; {
+
+      before(() =&gt; {
+        return gitActionListener.push(mockPush);
+      });
+      after(() =&gt; {
+        mockPush.accept.reset();
+      });
+      it(&apos;accepts the push&apos;, () =&gt; {
+        return expect(mockPush.accept).to.have.been.called;
+      });
+      it(&apos;queries for lower lower case email addres&apos;, () =&gt; {
+        return expect(HoistUser.findOneAsync)
+          .to.have.been.calledWith({
+            emailAddresses: {
+              $elemMatch: {
+                address: &apos;test@hoist.io&apos;
+              }
+            }
+          });
+      });
+      it(&apos;queries for organisation user has access to&apos;, () =&gt; {
+        return expect(Organisation.findOneAsync)
+          .to.have.been.calledWith({
+            slug: &apos;org&apos;,
+            _id: {
+              $in: user.organisations
+            }
+          });
+      });
+      it(&apos;queries correct application&apos;, () =&gt; {
+        return expect(Application.findOneAsync)
+          .to.have.been.calledWith({
+            organisation: &apos;org-id&apos;,
+            slug: &apos;app&apos;
+          });
+      });
+      it(&apos;creates the hook file&apos;, () =&gt; {
+        return expect(gitActionListener.createHookFile)
+          .to.have.been.calledWith(
+            path.resolve(__dirname, &apos;../../lib/hook-include.sh&apos;),
+            path.resolve(__dirname, &apos;./hooks/pre-receive&apos;));
+      });
+    });
+    describe(&apos;if push is made without auth header&apos;, () =&gt; {
+      let originalHeader;
+      before(() =&gt; {
+        originalHeader = mockPush.request.headers.authorization;
+        delete mockPush.request.headers.authorization;
+        return gitActionListener.push(mockPush);
+      });
+      after(() =&gt; {
+        mockPush.request.headers.authorization = originalHeader;
+        mockPush.reject.reset();
+      });
+      it(&apos;rejects the push with a 401 error&apos;, () =&gt; {
+        return expect(mockPush.reject)
+          .to.have.been.calledWith(401, &apos;Missing Authentication Header&apos;);
+      });
+    });
+    describe(&apos;if user doesn\&apos;t have access to repository&apos;, () =&gt; {
+      before(() =&gt; {
+        Organisation.findOneAsync.returns(Promise.resolve(null));
+        return gitActionListener.push(mockPush);
+      });
+      after(() =&gt; {
+        mockPush.reject.reset();
+        Organisation.findOneAsync.returns(Promise.resolve(organisation));
+      });
+      it(&apos;rejects the push with a 401 error&apos;, () =&gt; {
+        return expect(mockPush.reject)
+          .to.have.been.calledWith(401, `The specified user doesn&apos;t have access to this repository, or the repository doesn&apos;t exist`);
+      });
+    });
+    describe(&apos;if username is wrong&apos;, () =&gt; {
+
+      before(() =&gt; {
+        HoistUser.findOneAsync.returns(Promise.resolve(null));
+        return gitActionListener.push(mockPush);
+      });
+      after(() =&gt; {
+        HoistUser.findOneAsync.returns(Promise.resolve(user));
+        mockPush.reject.reset();
+      });
+      it(&apos;rejects the push with a 401 error&apos;, () =&gt; {
+        return expect(mockPush.reject)
+          .to.have.been.calledWith(401, `Incorrect username or password provided`);
+      });
+    });
+    describe(&apos;if password is wrong&apos;, () =&gt; {
+      let originalHeader;
+      before(() =&gt; {
+        originalHeader = mockPush.request.headers.authorization;
+        mockPush.request.headers.authorization = &apos;Basic &apos; + new Buffer(username + &quot;:&quot; + &apos;bad-password&apos;, &quot;utf8&quot;).toString(&quot;base64&quot;);
+        return gitActionListener.push(mockPush);
+      });
+      after(() =&gt; {
+        mockPush.request.headers.authorization = originalHeader;
+        mockPush.reject.reset();
+      });
+      it(&apos;rejects the push with a 401 error&apos;, () =&gt; {
+        return expect(mockPush.reject)
+          .to.have.been.calledWith(401, `Incorrect username or password provided`);
+      });
+    });
+  });
+});
+</code></pre>
+</div>
+
+<footer class="footer">
+  Generated by <a href="https://esdoc.org">ESDoc<span data-ice="esdocVersion">(0.1.3)</span></a>
+</footer>
+
+<script src="script/search_index.js"></script>
+<script src="script/search.js"></script>
+<script src="script/pretty-print.js"></script>
+<script src="script/inherited-summary.js"></script>
+<script src="script/test-summary.js"></script>
+<script src="script/inner-link.js"></script>
+<script src="script/patch-for-local.js"></script>
+</body>
+</html>

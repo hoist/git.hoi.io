@@ -1,8 +1,34 @@
 machine:
-  ruby:
-    version: 2.1.2
+  pre:
+    - sudo curl -L -o /usr/bin/docker 'http://s3-external-1.amazonaws.com/circle-downloads/docker-1.6.2-circleci'; sudo chmod 0755 /usr/bin/docker; true;
+  services:
+    - docker
   node:
-    version: v0.10.28
+    version: v0.10.35
+checkout:
+  post:
+    - git fetch --unshallow 2>/dev/null || true
+    - git fetch --tags
+    # Nasty hack: Because we get a freshly restored repo, timestamps do not
+    # correspond any more to when the file was last changed. To rectify this,
+    # first set everything to a timestamp in the past and then update the
+    # timestamp for all git-tracked files based on their last committed change.
+    - find . -exec touch -t 201401010000 {} \;
+    - for x in $(git ls-tree --full-tree --name-only -r HEAD); do touch -t $(date -d "$(git log -1 --format=%ci "${x}")" +%y%m%d%H%M.%S) "${x}"; done
+dependencies:
+  cache_directories:
+    - "~/docker"
+  override:
+    - mkdir -p ~/docker
+    - if [[ -e ~/docker/git.hoi.io.tar ]]; then docker load -i ~/docker/git.hoi.io.tar; fi
+    - docker build -t quay.io/hoist/git.hoi.io:${CIRCLE_BRANCH//feature\//} .
+    - docker save "quay.io/hoist/git.hoi.io" > ~/docker/git.hoi.io.tar
+test:
+  override:
+    - docker kill test; true;
+    - docker rm test; true;
+    - docker run --name test --entrypoint gulp quay.io/hoist/git.hoi.io:${CIRCLE_BRANCH//feature\//} test
+    - docker cp test:/usr/src/app/coverage ~/
 general:
   artifacts:
     - coverage/*
@@ -10,8 +36,12 @@ general:
     - log/*.log
     - npm-debug.log
 deployment:
-  production:
-    branch: master
+  master:
+    branch: [master,/feature\/.*/]
+    owner: hoist
     commands:
-      - git submodule add git@github.com:hoist/deploy.git
-      - cd deploy && bundle install && bundle exec cap web_servers deploy
+      - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS quay.io
+      - docker push quay.io/hoist/git.hoi.io:${CIRCLE_BRANCH//feature\//}
+notify:
+  webhooks:
+    - url: https://overlord.hoist.io/api/webhook/circleci?api_token=xc1zrzacmxp9samlj9nya4gzay

@@ -1,403 +1,205 @@
 'use strict';
-require('../bootstrap');
-var GitActionListener = require('../../lib/git_action_listener');
-var sinon = require('sinon');
-var expect = require('chai').expect;
-var path = require('path');
-var fs = require('fs');
-var hoistModel = require('hoist-model');
-var User = hoistModel.HoistUser;
-var Organisation = hoistModel.Organisation;
-var Application = hoistModel.Application;
-var BBPromise = require('bluebird');
-
-describe('GitActionListener', function () {
-
-  this.timeout(2000);
-  var repos = {
-    on: sinon.stub()
-  };
-  var gitListener;
-  var username = 'Test@hoi.io';
-  var password = 'password';
-
-  var user = new User({
-    emailAddresses: [{
-      address: username.toLowerCase()
-    }],
-    organisations: ['orgid']
+import {
+  expect
+}
+from 'chai';
+import sinon from 'sinon';
+import GitActionListener from '../../lib/git_action_listener';
+import path from 'path';
+import fs from 'fs';
+import {
+  HoistUser, Organisation, Application
+}
+from '@hoist/model';
+/** @test {GitActionListener} */
+describe('GitActionListener', () => {
+  let gitActionListener;
+  before(() => {
+    gitActionListener = new GitActionListener();
   });
-  var org = new Organisation({
-    _id: 'orgid',
-    name: 'org'
+  /** @test {GitActionListener#bindToRepository} */
+  describe('GitActionListener#bindToRepository', () => {
+    let stubRepos = {
+      on: sinon.stub()
+    };
+    before(() => {
+      sinon.stub(gitActionListener, 'push');
+      gitActionListener.bindToRepository(stubRepos);
+    });
+    after(() => {
+      gitActionListener.push.restore();
+    });
+    it('binds push event to the #push method', () => {
+      let pushObject = {};
+      return Promise.resolve()
+        .then(() => {
+          stubRepos.on.yield(pushObject);
+        }).then(() => {
+          return expect(gitActionListener.push).to.have.been.calledWith(pushObject);
+        });
+    });
   });
-  var app = new Application({
-    _id: 'appid',
-    name: 'app'
+  /** @test {GitActionListener#createHookFile} */
+  describe('GitActionListener#createHookFile', () => {
+    let target = 'temp_hook_file';
+    before(() => {
+      let template = path.resolve(__dirname, '../../lib/hook-include.sh');
+      return gitActionListener.createHookFile(template, target);
+    });
+    it('should create link to hook-file', () => {
+      let hookCall = `node "${path.resolve(__dirname, '../../lib/hook.js')}"`;
+      return expect(fs.readFileSync(target, 'utf8')).to.contain(hookCall);
+    });
   });
-
-  before(function () {
-    gitListener = new GitActionListener();
-    gitListener.bindToRepository(repos);
-    return user.setPassword(password);
-  });
-
-  it('should subscribe to push events', function () {
-    expect(repos.on)
-      .to.have.been.calledWith('push');
-  });
-  describe('push', function () {
-    var sandbox;
-    describe('given an existing symlink hook', function () {
-      describe('with valid authorization', function () {
-        var push = {
-          repo: 'org/app',
-          request: {
-            headers: {
-              authorization: 'basic ' + new Buffer(username + ':' + password).toString('base64')
-            }
-          },
-          cwd: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook'),
-          accept: sinon.stub(),
-          reject: sinon.stub()
-        };
-        before(function (done) {
-          push.accept = done;
-          sandbox = sinon.sandbox.create();
-          sandbox.stub(User, 'findOneAsync').returns(BBPromise.resolve(user));
-          sandbox.stub(Organisation, 'findOneAsync').returns(BBPromise.resolve(org));
-          sandbox.stub(Application, 'findOneAsync').returns(BBPromise.resolve(app));
-          return gitListener.push(push);
-        });
-
-        after(function () {
-          sandbox.restore();
-        });
+  describe('GitActionListener#push', () => {
+    let username = 'test@Hoist.io';
+    let password = 'test';
+    let mockPush = {
+      reject: sinon.stub(),
+      accept: sinon.stub(),
+      cwd: path.resolve(__dirname),
+      repo: "org/app.git",
+      request: {
+        headers: {
+          authorization: 'Basic ' + new Buffer(username + ":" + password, "utf8").toString("base64")
+        }
+      }
+    };
+    let organisation;
+    let application;
+    let user;
+    before(() => {
+      organisation = new Organisation({
+        _id: 'org-id',
+        slug: 'org'
       });
-      describe('with incorrect username', function () {
-        var push = {
-          repo: 'org/app',
-          request: {
-            headers: {
-              authorization: 'basic ' + new Buffer('fakeusername' + ':' + 'fakepassword').toString('base64')
-            }
-          },
-          cwd: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook'),
-          accept: sinon.stub(),
-          reject: sinon.stub()
-        };
-        before(function () {
-          sandbox = sinon.sandbox.create();
-          sandbox.stub(User, 'findOneAsync').returns(BBPromise.resolve(null));
-          return gitListener.push(push);
-        });
-
-        it('should call reject', function () {
-          /* jshint -W030 */
-          expect(push.reject)
-            .to.have.been.calledWith(401, 'Bad request');
-        });
-
-        after(function () {
-          sandbox.restore();
-        });
+      application = new Application({
+        organiation: organisation
       });
-      describe('incorrect password', function () {
-        var push = {
-          repo: 'org/app',
-          request: {
-            headers: {
-              authorization: 'basic ' + new Buffer(username + ':' + 'fakepassword').toString('base64')
-            }
-          },
-          cwd: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook'),
-          accept: sinon.stub(),
-          reject: sinon.stub()
-        };
-        before(function () {
-          sandbox = sinon.sandbox.create();
-          sandbox.stub(User, 'findOneAsync').returns(BBPromise.resolve(user));
-          return gitListener.push(push);
-        });
-
-        it('should call reject', function () {
-          /* jshint -W030 */
-          expect(push.reject)
-            .to.have.been.calledWith(401, 'Bad request');
-        });
-
-        after(function () {
-          sandbox.restore();
-        });
+      user = new HoistUser({
+        emailAddresses: [{
+          address: username
+        }],
+        organisations: [organisation._id]
       });
-      describe('with no authorization', function () {
-        var push = {
-          repo: 'org/app',
-          request: {
-            headers: {}
-          },
-          cwd: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook'),
-          accept: sinon.stub(),
-          reject: sinon.stub()
-        };
-        before(function () {
-          sandbox = sinon.sandbox.create();
-          sandbox.stub(User, 'findOneAsync').returns(BBPromise.resolve(user));
-          return gitListener.push(push);
-        });
 
-        it('should call reject', function () {
-          /* jshint -W030 */
-          expect(push.reject)
-            .to.have.been.calledWith(401, 'Bad request');
-        });
+      sinon.stub(HoistUser, 'findOneAsync').returns(Promise.resolve(user));
+      sinon.stub(Application, 'findOneAsync').returns(Promise.resolve(application));
+      sinon.stub(Organisation, 'findOneAsync').returns(Promise.resolve(organisation));
+      sinon.stub(gitActionListener, 'createHookFile');
+      sinon.stub(fs, 'unlink');
+      return user.setPassword(password);
+    });
+    after(() => {
+      fs.unlink.restore();
+      gitActionListener.createHookFile.restore();
+      Organisation.findOneAsync.restore();
+      Application.findOneAsync.restore();
+      HoistUser.findOneAsync.restore();
+    });
+    describe('if has access to repository', () => {
 
-        after(function () {
-          sandbox.restore();
-        });
+      before(() => {
+        return gitActionListener.push(mockPush);
       });
-      describe('with invalid organisation', function () {
-        var push = {
-          repo: 'fake/app',
-          request: {
-            headers: {
-              authorization: 'basic ' + new Buffer(username + ':' + password).toString('base64')
-            }
-          },
-          cwd: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook'),
-          accept: sinon.stub(),
-          reject: sinon.stub()
-        };
-        before(function () {
-          sandbox = sinon.sandbox.create();
-          sandbox.stub(User, 'findOneAsync').returns(BBPromise.resolve(user));
-          sandbox.stub(Organisation, 'findOneAsync').returns(BBPromise.resolve(null));
-          return gitListener.push(push);
-        });
-
-        it('should call reject', function () {
-          /* jshint -W030 */
-          expect(push.reject)
-            .to.have.been.calledWith(401, 'Bad request');
-        });
-
-        after(function () {
-          sandbox.restore();
-        });
+      after(() => {
+        mockPush.accept.reset();
       });
-      describe('with invalid application', function () {
-        var push = {
-          repo: 'fake/app',
-          request: {
-            headers: {
-              authorization: 'basic ' + new Buffer(username + ':' + password).toString('base64')
+      it('accepts the push', () => {
+        return expect(mockPush.accept).to.have.been.called;
+      });
+      it('queries for lower lower case email addres', () => {
+        return expect(HoistUser.findOneAsync)
+          .to.have.been.calledWith({
+            emailAddresses: {
+              $elemMatch: {
+                address: 'test@hoist.io'
+              }
             }
-          },
-          cwd: path.resolve(__dirname, '../fixtures/repo_with_symlink_hook'),
-          accept: sinon.stub(),
-          reject: sinon.stub()
-        };
-        before(function () {
-          sandbox = sinon.sandbox.create();
-          sandbox.stub(User, 'findOneAsync').returns(BBPromise.resolve(user));
-          sandbox.stub(Organisation, 'findOneAsync').returns(BBPromise.resolve(org));
-          sandbox.stub(Application, 'findOneAsync').returns(BBPromise.resolve(null));
-          return gitListener.push(push);
-        });
-
-        it('should call reject', function () {
-          /* jshint -W030 */
-          expect(push.reject)
-            .to.have.been.calledWith(401, 'Bad request');
-        });
-
-        after(function () {
-          sandbox.restore();
-        });
+          });
+      });
+      it('queries for organisation user has access to', () => {
+        return expect(Organisation.findOneAsync)
+          .to.have.been.calledWith({
+            slug: 'org',
+            _id: {
+              $in: user.organisations
+            }
+          });
+      });
+      it('queries correct application', () => {
+        return expect(Application.findOneAsync)
+          .to.have.been.calledWith({
+            organisation: 'org-id',
+            slug: 'app'
+          });
+      });
+      it('creates the hook file', () => {
+        return expect(gitActionListener.createHookFile)
+          .to.have.been.calledWith(
+            path.resolve(__dirname, '../../lib/hook-include.sh'),
+            path.resolve(__dirname, './hooks/pre-receive'));
       });
     });
-    describe('given no existing file hook', function () {
-      describe('with valid authorization', function () {
-        var push = {
-          repo: 'org/app',
-          request: {
-            headers: {
-              authorization: 'basic ' + new Buffer(username + ':' + password).toString('base64')
-            }
-          },
-          cwd: path.resolve(__dirname, '../fixtures/repo_sans_hook'),
-          accept: sinon.stub(),
-          reject: sinon.stub()
-        };
-        before(function (done) {
-          push.accept = done;
-          sandbox = sinon.sandbox.create();
-          sandbox.stub(User, 'findOneAsync').returns(BBPromise.resolve(user));
-          sandbox.stub(Organisation, 'findOneAsync').returns(BBPromise.resolve(org));
-          sandbox.stub(Application, 'findOneAsync').returns(BBPromise.resolve(app));
-          return gitListener.push(push);
-        });
-
-        it('should create hook file', function () {
-          expect(fs.existsSync(path.resolve(push.cwd, './hooks/post-receive')))
-            .to.eql(true);
-        });
-        it('makes executable file', function () {
-          var mode = fs.statSync(path.resolve(push.cwd, './hooks/post-receive')).mode.toString(8);
-          expect(mode.substring(mode.length - 3, mode.length))
-            .to.eql('755');
-        });
-        it('substitues path', function () {
-          expect(fs.readFileSync(path.resolve(push.cwd, './hooks/post-receive'), {
-              encoding: 'utf8'
-            }))
-            .to.contain(path.resolve(__dirname, '../../lib/hook.js'));
-        });
-        after(function () {
-          fs.unlinkSync(path.resolve(push.cwd, './hooks/post-receive'));
-          sandbox.restore();
-        });
+    describe('if push is made without auth header', () => {
+      let originalHeader;
+      before(() => {
+        originalHeader = mockPush.request.headers.authorization;
+        delete mockPush.request.headers.authorization;
+        return gitActionListener.push(mockPush);
       });
-      describe('with incorrect username', function () {
-        var push = {
-          repo: 'org/app',
-          request: {
-            headers: {
-              authorization: 'basic ' + new Buffer('fakeusername' + ':' + 'fakepassword').toString('base64')
-            }
-          },
-          cwd: path.resolve(__dirname, '../fixtures/repo_sans_hook'),
-          accept: sinon.stub(),
-          reject: sinon.stub()
-        };
-        before(function () {
-          sandbox = sinon.sandbox.create();
-          sandbox.stub(User, 'findOneAsync').returns(BBPromise.resolve(null));
-          return gitListener.push(push);
-        });
-
-        it('should call reject', function () {
-          /* jshint -W030 */
-          expect(push.reject)
-            .to.have.been.calledWith(401, 'Bad request');
-        });
-
-        after(function () {
-          sandbox.restore();
-        });
+      after(() => {
+        mockPush.request.headers.authorization = originalHeader;
+        mockPush.reject.reset();
       });
-      describe('incorrect password', function () {
-        var push = {
-          repo: 'org/app',
-          request: {
-            headers: {
-              authorization: 'basic ' + new Buffer(username + ':' + 'fakepassword').toString('base64')
-            }
-          },
-          cwd: path.resolve(__dirname, '../fixtures/repo_sans_hook'),
-          accept: sinon.stub(),
-          reject: sinon.stub()
-        };
-        before(function () {
-          sandbox = sinon.sandbox.create();
-          sandbox.stub(User, 'findOneAsync').returns(BBPromise.resolve(user));
-          return gitListener.push(push);
-        });
-
-        it('should call reject', function () {
-          /* jshint -W030 */
-          expect(push.reject)
-            .to.have.been.calledWith(401, 'Bad request');
-        });
-
-        after(function () {
-          sandbox.restore();
-        });
+      it('rejects the push with a 401 error', () => {
+        return expect(mockPush.reject)
+          .to.have.been.calledWith(401, 'Missing Authentication Header');
       });
-      describe('with no authorization', function () {
-        var push = {
-          repo: 'org/app',
-          request: {
-            headers: {}
-          },
-          cwd: path.resolve(__dirname, '../fixtures/repo_sans_hook'),
-          accept: sinon.stub(),
-          reject: sinon.stub()
-        };
-        before(function () {
-          sandbox = sinon.sandbox.create();
-          sandbox.stub(User, 'findOneAsync').returns(BBPromise.resolve(user));
-          return gitListener.push(push);
-        });
-
-        it('should call reject', function () {
-          /* jshint -W030 */
-          expect(push.reject)
-            .to.have.been.calledWith(401, 'Bad request');
-        });
-
-        after(function () {
-          sandbox.restore();
-        });
+    });
+    describe('if user doesn\'t have access to repository', () => {
+      before(() => {
+        Organisation.findOneAsync.returns(Promise.resolve(null));
+        return gitActionListener.push(mockPush);
       });
-      describe('with invalid organisation', function () {
-        var push = {
-          repo: 'fake/app',
-          request: {
-            headers: {
-              authorization: 'basic ' + new Buffer(username + ':' + password).toString('base64')
-            }
-          },
-          cwd: path.resolve(__dirname, '../fixtures/repo_sans_hook'),
-          accept: sinon.stub(),
-          reject: sinon.stub()
-        };
-        before(function () {
-          sandbox = sinon.sandbox.create();
-          sandbox.stub(User, 'findOneAsync').returns(BBPromise.resolve(user));
-          sandbox.stub(Organisation, 'findOneAsync').returns(BBPromise.resolve(null));
-          return gitListener.push(push);
-        });
-
-        it('should call reject', function () {
-          /* jshint -W030 */
-          expect(push.reject)
-            .to.have.been.calledWith(401, 'Bad request');
-        });
-
-        after(function () {
-          sandbox.restore();
-        });
+      after(() => {
+        mockPush.reject.reset();
+        Organisation.findOneAsync.returns(Promise.resolve(organisation));
       });
-      describe('with invalid application', function () {
-        var push = {
-          repo: 'fake/app',
-          request: {
-            headers: {
-              authorization: 'basic ' + new Buffer(username + ':' + password).toString('base64')
-            }
-          },
-          cwd: path.resolve(__dirname, '../fixtures/repo_sans_hook'),
-          accept: sinon.stub(),
-          reject: sinon.stub()
-        };
-        before(function () {
-          sandbox = sinon.sandbox.create();
-          sandbox.stub(User, 'findOneAsync').returns(BBPromise.resolve(user));
-          sandbox.stub(Organisation, 'findOneAsync').returns(BBPromise.resolve(org));
-          sandbox.stub(Application, 'findOneAsync').returns(BBPromise.resolve(null));
-          return gitListener.push(push);
-        });
+      it('rejects the push with a 401 error', () => {
+        return expect(mockPush.reject)
+          .to.have.been.calledWith(401, `The specified user doesn't have access to this repository, or the repository doesn't exist`);
+      });
+    });
+    describe('if username is wrong', () => {
 
-        it('should call reject', function () {
-          /* jshint -W030 */
-          expect(push.reject)
-            .to.have.been.calledWith(401, 'Bad request');
-        });
-
-        after(function () {
-          sandbox.restore();
-        });
+      before(() => {
+        HoistUser.findOneAsync.returns(Promise.resolve(null));
+        return gitActionListener.push(mockPush);
+      });
+      after(() => {
+        HoistUser.findOneAsync.returns(Promise.resolve(user));
+        mockPush.reject.reset();
+      });
+      it('rejects the push with a 401 error', () => {
+        return expect(mockPush.reject)
+          .to.have.been.calledWith(401, `Incorrect username or password provided`);
+      });
+    });
+    describe('if password is wrong', () => {
+      let originalHeader;
+      before(() => {
+        originalHeader = mockPush.request.headers.authorization;
+        mockPush.request.headers.authorization = 'Basic ' + new Buffer(username + ":" + 'bad-password', "utf8").toString("base64");
+        return gitActionListener.push(mockPush);
+      });
+      after(() => {
+        mockPush.request.headers.authorization = originalHeader;
+        mockPush.reject.reset();
+      });
+      it('rejects the push with a 401 error', () => {
+        return expect(mockPush.reject)
+          .to.have.been.calledWith(401, `Incorrect username or password provided`);
       });
     });
   });
