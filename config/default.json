@@ -3,10 +3,18 @@
     "application": {
       "name": "git.hoi.io"
     },
+    "rabbit": {
+      "url": "amqp://rabbitmq",
+      "managementurl": "http://guest:guest@rabbitmq:15672/"
+    },
     "debug": true,
     "server": {
       "host": "0.0.0.0",
       "port": 8000
+    },
+    "publisher": {
+      "heartbeat": 60,
+      "timeout": 120000
     },
     "filePaths": {
       "repositories": "/shares/repos",

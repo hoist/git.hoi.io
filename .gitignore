@@ -43,7 +43,7 @@ public/css/style.css
 coverage/*
 log/*
 config/runtime.json
-config/test.json
+config/development.json
 .queues
 
 tests/fixtures/checkouts/**/*
