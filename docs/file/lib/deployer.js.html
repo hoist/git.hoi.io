@@ -308,14 +308,19 @@ class Deployer {
         }, 10);
       })
       .then(() =&gt; {
-        return fs.copyAsync(path.join(this.getDeployPath(), &apos;node_modules&apos;), this.getNpmCachePath(), {
-            clobber: true
-          })
-          .finally(() =&gt; {
-            clearInterval(this.progress);
-            process.stdout.write(&apos;#\n&apos;);
+        return Promise.resolve()
+          .then(() =&gt; {
+            if (fs.existsSync(path.join(this.getDeployPath(), &apos;node_modules&apos;))) {
+              return fs.copyAsync(path.join(this.getDeployPath(), &apos;node_modules&apos;), this.getNpmCachePath(), {
+                clobber: true
+              });
+            }
           });
+      }).finally(() =&gt; {
+        clearInterval(this.progress);
+        process.stdout.write(&apos;#\n&apos;);
       });
+
   }
   npmInstall() {
     var packageJsonPath = path.join(this.getDeployPath(), &apos;package.json&apos;);
