@@ -22,7 +22,7 @@ WORKDIR /usr/src/app
 ENV NPM_CONFIG_LOGLEVEL=warn
 
 #install global packages
-RUN npm install -g nodemon && npm install -g babel && npm install -g gulp
+RUN npm install -g nodemon babel gulp bunyan-hub bunyan-sub
 
 ADD package.json /usr/src/app/package.json
 RUN npm install
@@ -34,9 +34,11 @@ ENV NODE_HEAPDUMP_OPTIONS=nosignal
 USER root
 ADD . /usr/src/app
 RUN chown -R hoist:hoist /usr/src/app
+
 USER hoist
 
 EXPOSE 8000
+EXPOSE 28692
 
 ENTRYPOINT ["nodemon", "--exitcrash","--watch", "/config", "--exec"]
 

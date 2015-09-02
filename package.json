@@ -48,7 +48,7 @@
   "dependencies": {
     "@hoist/broker": "^1.0.11",
     "@hoist/errors": "^1.0.0",
-    "@hoist/logger": "^1.0.0",
+    "@hoist/logger": "^1.0.5",
     "@hoist/model": "^1.0.0",
     "agenda": "^0.6.24",
     "babel": "^5.4.3",

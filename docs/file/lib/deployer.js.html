@@ -54,12 +54,13 @@
 
 <div class="content" data-ice="content"><h1 data-ice="title">lib/deployer.js</h1>
 <pre class="source-code line-number"><code class="prettyprint linenums" data-ice="content">&apos;use strict&apos;;
+import Promise from &apos;bluebird&apos;;
 import streamToPromise from &apos;stream-to-promise&apos;;
 import Targz from &apos;tar.gz&apos;;
 import config from &apos;config&apos;;
 import path from &apos;path&apos;;
 import moment from &apos;moment&apos;;
-import Bluebird from &apos;bluebird&apos;;
+import logger from &apos;@hoist/logger&apos;;
 import uuid from &apos;uuid&apos;;
 import {
   _mongoose, Organisation, Application, ExecutionLogEvent, Event
@@ -77,11 +78,11 @@ import Git from &apos;nodegit&apos;;
 import Agenda from &apos;agenda&apos;;
 import _ from &apos;lodash&apos;;
 
-let fs = Bluebird.promisifyAll(require(&apos;fs-extra&apos;));
-let temp = Bluebird.promisifyAll(require(&apos;temp&apos;));
-let targz = Bluebird.promisifyAll(new Targz());
-let gitArchive = Bluebird.promisify(require(&apos;git-archive&apos;));
-Bluebird.promisifyAll(_mongoose);
+let fs = Promise.promisifyAll(require(&apos;fs-extra&apos;));
+let temp = Promise.promisifyAll(require(&apos;temp&apos;));
+let targz = Promise.promisifyAll(new Targz());
+let gitArchive = Promise.promisify(require(&apos;git-archive&apos;));
+Promise.promisifyAll(_mongoose);
 
 
 class Deployer {
@@ -121,7 +122,7 @@ class Deployer {
       });
   }
   getAgenda() {
-    return this.agenda || (this.agenda = Bluebird.promisifyAll(new Agenda({
+    return this.agenda || (this.agenda = Promise.promisifyAll(new Agenda({
       db: {
         address: config.get(&apos;Hoist.mongo.core.connectionString&apos;)
       }
@@ -129,22 +130,28 @@ class Deployer {
   }
   deploy() {
     let deleteDeployDir = true;
+    let timings = {
+      start: process.hrtime()
+    };
     if (this.commitSha1 === &quot;0000000000000000000000000000000000000000&quot;) {
       //deleting branch
       return Promise.resolve();
     }
     return this.printBanner()
       .then(() =&gt; {
-
+        timings.printBanner = process.hrtime(timings.start);
         return this.openDBConnection();
       })
       .then(() =&gt; {
+        timings.openConnection = process.hrtime(timings.printBanner);
         return this.primeRepository();
       })
       .then(() =&gt; {
+        timings.primeRepository = process.hrtime(timings.openConnection);
         return this.loadApplication();
       })
       .then(() =&gt; {
+        timings.loadApplication = process.hrtime(timings.primeRepository);
         return this.applicationEventLogger.log(new ExecutionLogEvent({
           message: `Deploy starting. Hash: ${this.commitSha1}`,
           type: &apos;DEPLOY&apos;,
@@ -152,27 +159,37 @@ class Deployer {
           environment: &apos;live&apos;
         }));
       }).then(() =&gt; {
+        timings.startDeployLog = process.hrtime(timings.loadApplication);
         return this.createArchive();
       }).then(() =&gt; {
+        timings.createArchive = process.hrtime(timings.startDeployLog);
         return this.deployArchive();
       }).then(() =&gt; {
+        timings.deployArchive = process.hrtime(timings.createArchive);
         return this.npmInstall();
       }).then(() =&gt; {
-
+        timings.npmInstall = process.hrtime(timings.deployArchive);
         console.log(&apos;updating config&apos;);
         return this.updateConfig();
       }).then(() =&gt; {
+        timings.updateConfig = process.hrtime(timings.npmInstall);
         return this.updateSchedules();
       }).then(() =&gt; {
+        timings.updateSchedules = process.hrtime(timings.updateConfig);
         return this.application.saveAsync();
       }).then(() =&gt; {
+        timings.saveApplication = process.hrtime(timings.updateSchedules);
         return this.linkReleaseDirectory();
       }).then(() =&gt; {
+        timings.linkReleaseDirectory = process.hrtime(timings.saveApplication);
         deleteDeployDir = false;
         process.stdout.write(&apos;\x1b[32mDeploy Completed Successfully\x1b[37m\n&apos;);
       }).then(() =&gt; {
+        timings.done = process.hrtime(timings.linkReleaseDirectory);
         return this.clearOldDirectories().catch(() =&gt; {});
+
       }).then(() =&gt; {
+        timings.clearOldDirectories = process.hrtime(timings.done);
         return Promise.all([
           this.notificationLogger.log(new Notification({
             applicationId: this.application._id,
@@ -188,6 +205,7 @@ class Deployer {
           }))
         ]);
       }).then(() =&gt; {
+        timings.endDeployEvent = process.hrtime(timings.clearOldDirectories);
         if (this.application) {
           return this.applicationEventLogger.log(new ExecutionLogEvent({
             message: `Deploy complete. Hash: ${this.commitSha1}`,
@@ -198,6 +216,7 @@ class Deployer {
         }
       }).catch((err) =&gt; {
         console.error(err);
+        logger.alert(err);
         return Promise.resolve()
           .then(() =&gt; {
             if (this.application) {
@@ -219,6 +238,10 @@ class Deployer {
             throw err;
           });
       }).finally(() =&gt; {
+        timings.total = process.hrtime(timings.start);
+        logger.warn({
+          timings
+        }, &apos;final timings&apos;);
         return this.closeDBConnection();
       });
   }
@@ -229,7 +252,7 @@ class Deployer {
     return _mongoose.disconnectAsync();
   }
   loadOrganisation() {
-    return Bluebird.resolve(this.organisation || Organisation.findOneAsync({
+    return Promise.resolve(this.organisation || Organisation.findOneAsync({
       slug: this.organisationSlug
     })).then((organisation) =&gt; {
       this.organisation = organisation;
@@ -237,7 +260,7 @@ class Deployer {
     });
   }
   loadApplication() {
-    return Bluebird.resolve(this.application || this.loadOrganisation()
+    return Promise.resolve(this.application || this.loadOrganisation()
       .then(() =&gt; {
         return Application.findOneAsync({
           organisation: this.organisation._id,
@@ -272,7 +295,7 @@ class Deployer {
         encoding: &apos;utf8&apos;
       })
       .then((hoistJson) =&gt; {
-        return Bluebird.try(() =&gt; {
+        return Promise.try(() =&gt; {
           console.log(&apos;parsing hoist.json file&apos;);
           return jsonlint.parse(hoistJson);
         }).catch(function (err) {
@@ -282,7 +305,7 @@ class Deployer {
       });
   }
   restoreNpmCache() {
-    return Bluebird.try(() =&gt; {
+    return Promise.try(() =&gt; {
       if (fs.existsSync(this.getNpmCachePath())) {
         var progress = setInterval(function () {
           process.stdout.write(&apos;#&apos;);
@@ -296,7 +319,7 @@ class Deployer {
     });
   }
   saveNpmCache() {
-    return Bluebird.try(() =&gt; {
+    return Promise.try(() =&gt; {
         console.log(&apos;saving npm cache&apos;);
         if (fs.existsSync(this.getNpmCachePath())) {
           return fs.removeAsync(this.getNpmCachePath());
@@ -326,12 +349,12 @@ class Deployer {
     var packageJsonPath = path.join(this.getDeployPath(), &apos;package.json&apos;);
     //no package.json so don&apos;t do an npm install
     if (!fs.existsSync(packageJsonPath)) {
-      return Bluebird.resolve(null);
+      return Promise.resolve(null);
     }
     return this.restoreNpmCache()
       .then(() =&gt; {
         console.log(&apos;\x1b[32m--------&gt; starting npm install\x1b[37m\n&apos;);
-        return new Bluebird((resolve, reject) =&gt; {
+        return new Promise((resolve, reject) =&gt; {
           var npmProcess = require(&apos;child_process&apos;)
             .spawn(&apos;npm&apos;, [&apos;install&apos;, &apos;--production&apos;, &apos;--loglevel info&apos;, &apos;--spin false&apos;], {
               cwd: this.getDeployPath(),
@@ -393,8 +416,8 @@ class Deployer {
       &apos;data.application&apos;: this.application._id
     }).then(() =&gt; {
       if (this.application.settings.live.schedules) {
-        return Bluebird.all(_.map(this.application.settings.live.schedules, (schedule, key) =&gt; {
-          var scheduleJob = Bluebird.promisifyAll(this.agenda.create(&apos;create:event2&apos;, {
+        return Promise.all(_.map(this.application.settings.live.schedules, (schedule, key) =&gt; {
+          var scheduleJob = Promise.promisifyAll(this.agenda.create(&apos;create:event2&apos;, {
             application: this.application._id,
             environment: &apos;live&apos;,
             events: schedule.events
@@ -418,7 +441,7 @@ class Deployer {
         //keep 3 directories
         var directoriesToDelete = _.dropRight(directories, 3);
 
-        return Bluebird.all(_.map(directoriesToDelete, (dir) =&gt; {
+        return Promise.all(_.map(directoriesToDelete, (dir) =&gt; {
           return fs.removeAsync(path.join(this.deployRoot, dir));
         }));
       });
@@ -443,7 +466,7 @@ module.exports = Deployer;
 </div>
 
 <footer class="footer">
-  Generated by <a href="https://esdoc.org">ESDoc<span data-ice="esdocVersion">(0.1.3)</span></a>
+  Generated by <a href="https://esdoc.org">ESDoc<span data-ice="esdocVersion">(0.1.4)</span></a>
 </footer>
 
 <script src="script/search_index.js"></script>

@@ -7,5 +7,6 @@ git:
    - NODE_ENV=development
   ports:
     - "3001:8000"
+    - "28692"
   volumes_from:
     - hoist_config_1

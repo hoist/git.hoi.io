@@ -9,7 +9,7 @@
     "access": null,
     "description": null,
     "lineNumber": 1,
-    "content": "'use strict';\nimport streamToPromise from 'stream-to-promise';\nimport Targz from 'tar.gz';\nimport config from 'config';\nimport path from 'path';\nimport moment from 'moment';\nimport Bluebird from 'bluebird';\nimport uuid from 'uuid';\nimport {\n  _mongoose, Organisation, Application, ExecutionLogEvent, Event\n}\nfrom '@hoist/model';\nimport {\n  NotificationLogger,\n  Publisher,\n  Notification\n}\nfrom '@hoist/broker';\nimport errors from '@hoist/errors';\nimport jsonlint from 'jsonlint';\nimport Git from 'nodegit';\nimport Agenda from 'agenda';\nimport _ from 'lodash';\n\nlet fs = Bluebird.promisifyAll(require('fs-extra'));\nlet temp = Bluebird.promisifyAll(require('temp'));\nlet targz = Bluebird.promisifyAll(new Targz());\nlet gitArchive = Bluebird.promisify(require('git-archive'));\nBluebird.promisifyAll(_mongoose);\n\n\nclass Deployer {\n  constructor(buffer) {\n    temp.track();\n    let params = buffer.toString().replace('\\n', '').split(' ');\n    this.timestamp = moment();\n    this.originalSha1 = params[0];\n    this.commitSha1 = params[1];\n    this.branch = params[2];\n    this.publisher = new Publisher();\n    this.applicationEventLogger = this.publisher;\n    this.notificationLogger = new NotificationLogger();\n    let subpath = process.cwd().replace(config.get('Hoist.filePaths.repositories'), '');\n    subpath = subpath.replace('.git', '');\n\n    let subPathParts = subpath.split('/');\n\n    this.organisationSlug = subPathParts[1];\n    this.applicationSlug = subPathParts[2];\n    this.deployRoot = path.join(config.get(\"Hoist.filePaths.deploys\"), subpath);\n    this.deployFolder = this.timestamp.format('X');\n  }\n  getNpmCachePath() {\n    return this.npmCachePath || (this.npmCachePath = path.join(this.deployRoot, '.npmcache'));\n  }\n  getDeployPath() {\n    return this.deployPath || (this.deployPath = path.join(this.deployRoot, this.deployFolder));\n  }\n  getSymlinkPathPath() {\n    return this.symlinkPath || (this.symlinkPath = path.join(this.deployRoot, 'current'));\n  }\n  primeRepository() {\n    return Git.Repository.open(process.cwd())\n      .then((repository) => {\n        this.repository = repository;\n      });\n  }\n  getAgenda() {\n    return this.agenda || (this.agenda = Bluebird.promisifyAll(new Agenda({\n      db: {\n        address: config.get('Hoist.mongo.core.connectionString')\n      }\n    })));\n  }\n  deploy() {\n    let deleteDeployDir = true;\n    if (this.commitSha1 === \"0000000000000000000000000000000000000000\") {\n      //deleting branch\n      return Promise.resolve();\n    }\n    return this.printBanner()\n      .then(() => {\n\n        return this.openDBConnection();\n      })\n      .then(() => {\n        return this.primeRepository();\n      })\n      .then(() => {\n        return this.loadApplication();\n      })\n      .then(() => {\n        return this.applicationEventLogger.log(new ExecutionLogEvent({\n          message: `Deploy starting. Hash: ${this.commitSha1}`,\n          type: 'DEPLOY',\n          application: this.application._id,\n          environment: 'live'\n        }));\n      }).then(() => {\n        return this.createArchive();\n      }).then(() => {\n        return this.deployArchive();\n      }).then(() => {\n        return this.npmInstall();\n      }).then(() => {\n\n        console.log('updating config');\n        return this.updateConfig();\n      }).then(() => {\n        return this.updateSchedules();\n      }).then(() => {\n        return this.application.saveAsync();\n      }).then(() => {\n        return this.linkReleaseDirectory();\n      }).then(() => {\n        deleteDeployDir = false;\n        process.stdout.write('\\x1b[32mDeploy Completed Successfully\\x1b[37m\\n');\n      }).then(() => {\n        return this.clearOldDirectories().catch(() => {});\n      }).then(() => {\n        return Promise.all([\n          this.notificationLogger.log(new Notification({\n            applicationId: this.application._id,\n            notificationType: 'Update'\n          })),\n          this.publisher.publish(new Event({\n            eventId: uuid.v4().split('-').join(''),\n            applicationId: this.application._id,\n            eventName: 'POST:DEPLOY',\n            environment: 'live',\n            correlationId: uuid.v4(),\n            payload: {}\n          }))\n        ]);\n      }).then(() => {\n        if (this.application) {\n          return this.applicationEventLogger.log(new ExecutionLogEvent({\n            message: `Deploy complete. Hash: ${this.commitSha1}`,\n            type: 'DEPLOY',\n            application: this.application._id,\n            environment: 'live'\n          }));\n        }\n      }).catch((err) => {\n        console.error(err);\n        return Promise.resolve()\n          .then(() => {\n            if (this.application) {\n              return this.applicationEventLogger.log(new ExecutionLogEvent({\n                message: `Deploy failed. Hash: ${this.commitSha1}`,\n                type: 'DEPLOY',\n                application: this.application._id,\n                environment: 'live'\n              }));\n            }\n          }).then(() => {\n            if (deleteDeployDir) {\n              return fs.removeAsync(this.getDeployPath())\n                .catch((err2) => {\n                  console.error(err2);\n                });\n            }\n          }).then(() => {\n            throw err;\n          });\n      }).finally(() => {\n        return this.closeDBConnection();\n      });\n  }\n  openDBConnection() {\n    return _mongoose.connectAsync(config.get('Hoist.mongo.core.connectionString'));\n  }\n  closeDBConnection() {\n    return _mongoose.disconnectAsync();\n  }\n  loadOrganisation() {\n    return Bluebird.resolve(this.organisation || Organisation.findOneAsync({\n      slug: this.organisationSlug\n    })).then((organisation) => {\n      this.organisation = organisation;\n      return this.organisation;\n    });\n  }\n  loadApplication() {\n    return Bluebird.resolve(this.application || this.loadOrganisation()\n      .then(() => {\n        return Application.findOneAsync({\n          organisation: this.organisation._id,\n          slug: this.applicationSlug\n        });\n      }).then((application) => {\n        this.application = application;\n      }));\n  }\n  updateConfig() {\n    return this.loadHoistJSON()\n      .then((hoistJson) => {\n        console.log('saving new settings');\n        this.application.settings.live = hoistJson;\n        this.application.markModified('settings.live');\n        this.application.lastDeploy.live = this.timestamp.toDate();\n        return this.repository.getCommit(this.commitSha1)\n          .then((commit) => {\n            this.application.lastCommit.live = {\n              message: commit.message(),\n              sha1: this.commitSha1,\n              user: commit.author().name() + ' ' + commit.author().email()\n            };\n\n          });\n\n\n      });\n  }\n  loadHoistJSON() {\n    return fs.readFileAsync(path.join(this.getDeployPath(), 'hoist.json'), {\n        encoding: 'utf8'\n      })\n      .then((hoistJson) => {\n        return Bluebird.try(() => {\n          console.log('parsing hoist.json file');\n          return jsonlint.parse(hoistJson);\n        }).catch(function (err) {\n\n          throw new errors.files.hoistJson.InvalidJsonError(err.message);\n        });\n      });\n  }\n  restoreNpmCache() {\n    return Bluebird.try(() => {\n      if (fs.existsSync(this.getNpmCachePath())) {\n        var progress = setInterval(function () {\n          process.stdout.write('#');\n        }, 10);\n        console.log('restoring npm cache');\n        return fs.copyAsync(this.getNpmCachePath(), path.join(this.getDeployPath(), 'node_modules')).finally(function () {\n          clearInterval(progress);\n          console.log('#\\n');\n        });\n      }\n    });\n  }\n  saveNpmCache() {\n    return Bluebird.try(() => {\n        console.log('saving npm cache');\n        if (fs.existsSync(this.getNpmCachePath())) {\n          return fs.removeAsync(this.getNpmCachePath());\n        }\n      })\n      .then(() => {\n        this.progress = setInterval(function () {\n          process.stdout.write('#');\n        }, 10);\n      })\n      .then(() => {\n        return Promise.resolve()\n          .then(() => {\n            if (fs.existsSync(path.join(this.getDeployPath(), 'node_modules'))) {\n              return fs.copyAsync(path.join(this.getDeployPath(), 'node_modules'), this.getNpmCachePath(), {\n                clobber: true\n              });\n            }\n          });\n      }).finally(() => {\n        clearInterval(this.progress);\n        process.stdout.write('#\\n');\n      });\n\n  }\n  npmInstall() {\n    var packageJsonPath = path.join(this.getDeployPath(), 'package.json');\n    //no package.json so don't do an npm install\n    if (!fs.existsSync(packageJsonPath)) {\n      return Bluebird.resolve(null);\n    }\n    return this.restoreNpmCache()\n      .then(() => {\n        console.log('\\x1b[32m--------> starting npm install\\x1b[37m\\n');\n        return new Bluebird((resolve, reject) => {\n          var npmProcess = require('child_process')\n            .spawn('npm', ['install', '--production', '--loglevel info', '--spin false'], {\n              cwd: this.getDeployPath(),\n              stdio: [process.stdin, process.stdout, 'pipe']\n            });\n          npmProcess.stderr.on('data', function (data) {\n            process.stdout.write('\\x1b[31m');\n            process.stdout.write(data);\n            process.stdout.write('\\x1b[37m');\n          });\n          npmProcess.on('exit', function (code) {\n            if (code === 0) {\n              process.stdout.write('\\x1b[32m<-------- npm install done\\x1b[37m\\n');\n              resolve();\n            } else {\n              reject(new Error('npm install failed'));\n            }\n          });\n        });\n      }).then(() => {\n        return this.saveNpmCache();\n      });\n\n\n  }\n  printBanner() {\n    return streamToPromise(fs.createReadStream(path.resolve(__dirname, './banner.txt')))\n      .then((banner) => {\n        process.stdout.write('\\x1b[32m');\n        process.stdout.write(banner);\n        process.stdout.write('\\x1b[37m');\n      })\n      .then(() => {\n        console.log('starting deployment');\n        console.log('\\x1b[42;30mref:\\x1b[40;37m', this.branch);\n        console.log('\\x1b[42;30mcommit:\\x1b[40;37m', this.commitSha1);\n        console.log('\\x1b[42;30moriginal:\\x1b[40;37m', this.originalSha1);\n      });\n  }\n  createArchive() {\n    return temp.openAsync({\n      suffix: '.tar.gz'\n    }).then((archive) => {\n      this.archive = archive;\n\n      return gitArchive({\n        commit: this.commitSha1,\n        outputPath: archive.path,\n        repoPath: process.cwd()\n      });\n    });\n  }\n  deployArchive() {\n    return targz.extractAsync(this.archive.path, this.getDeployPath());\n  }\n  updateSchedules() {\n    console.log('deleting existing schedules');\n    return this.getAgenda().cancelAsync({\n      'data.application': this.application._id\n    }).then(() => {\n      if (this.application.settings.live.schedules) {\n        return Bluebird.all(_.map(this.application.settings.live.schedules, (schedule, key) => {\n          var scheduleJob = Bluebird.promisifyAll(this.agenda.create('create:event2', {\n            application: this.application._id,\n            environment: 'live',\n            events: schedule.events\n          }));\n          scheduleJob.repeatEvery(key);\n          scheduleJob.computeNextRunAt();\n          console.log('adding schedule for ' + key);\n          return scheduleJob.saveAsync();\n        }, this));\n      }\n    });\n  }\n  clearOldDirectories() {\n    console.log('cleaning up');\n    return fs.readdirAsync(this.deployRoot)\n      .then((directories) => {\n        directories = _.sortBy(_.without(directories, '.npmcache'), function (dirName) {\n          return dirName;\n        });\n\n        //keep 3 directories\n        var directoriesToDelete = _.dropRight(directories, 3);\n\n        return Bluebird.all(_.map(directoriesToDelete, (dir) => {\n          return fs.removeAsync(path.join(this.deployRoot, dir));\n        }));\n      });\n  }\n  linkReleaseDirectory() {\n    console.log('marking release as current');\n    return Promise.resolve()\n      .then(() => {\n        if (fs.existsSync(this.getSymlinkPathPath())) {\n          return fs.unlinkAsync(this.getSymlinkPathPath());\n        }\n      })\n      .then(() => {\n        return fs.symlinkAsync(this.getDeployPath(), this.getSymlinkPathPath());\n      });\n  }\n\n}\n\nmodule.exports = Deployer;\n"
+    "content": "'use strict';\nimport Promise from 'bluebird';\nimport streamToPromise from 'stream-to-promise';\nimport Targz from 'tar.gz';\nimport config from 'config';\nimport path from 'path';\nimport moment from 'moment';\nimport logger from '@hoist/logger';\nimport uuid from 'uuid';\nimport {\n  _mongoose, Organisation, Application, ExecutionLogEvent, Event\n}\nfrom '@hoist/model';\nimport {\n  NotificationLogger,\n  Publisher,\n  Notification\n}\nfrom '@hoist/broker';\nimport errors from '@hoist/errors';\nimport jsonlint from 'jsonlint';\nimport Git from 'nodegit';\nimport Agenda from 'agenda';\nimport _ from 'lodash';\n\nlet fs = Promise.promisifyAll(require('fs-extra'));\nlet temp = Promise.promisifyAll(require('temp'));\nlet targz = Promise.promisifyAll(new Targz());\nlet gitArchive = Promise.promisify(require('git-archive'));\nPromise.promisifyAll(_mongoose);\n\n\nclass Deployer {\n  constructor(buffer) {\n    temp.track();\n    let params = buffer.toString().replace('\\n', '').split(' ');\n    this.timestamp = moment();\n    this.originalSha1 = params[0];\n    this.commitSha1 = params[1];\n    this.branch = params[2];\n    this.publisher = new Publisher();\n    this.applicationEventLogger = this.publisher;\n    this.notificationLogger = new NotificationLogger();\n    let subpath = process.cwd().replace(config.get('Hoist.filePaths.repositories'), '');\n    subpath = subpath.replace('.git', '');\n\n    let subPathParts = subpath.split('/');\n\n    this.organisationSlug = subPathParts[1];\n    this.applicationSlug = subPathParts[2];\n    this.deployRoot = path.join(config.get(\"Hoist.filePaths.deploys\"), subpath);\n    this.deployFolder = this.timestamp.format('X');\n  }\n  getNpmCachePath() {\n    return this.npmCachePath || (this.npmCachePath = path.join(this.deployRoot, '.npmcache'));\n  }\n  getDeployPath() {\n    return this.deployPath || (this.deployPath = path.join(this.deployRoot, this.deployFolder));\n  }\n  getSymlinkPathPath() {\n    return this.symlinkPath || (this.symlinkPath = path.join(this.deployRoot, 'current'));\n  }\n  primeRepository() {\n    return Git.Repository.open(process.cwd())\n      .then((repository) => {\n        this.repository = repository;\n      });\n  }\n  getAgenda() {\n    return this.agenda || (this.agenda = Promise.promisifyAll(new Agenda({\n      db: {\n        address: config.get('Hoist.mongo.core.connectionString')\n      }\n    })));\n  }\n  deploy() {\n    let deleteDeployDir = true;\n    let timings = {\n      start: process.hrtime()\n    };\n    if (this.commitSha1 === \"0000000000000000000000000000000000000000\") {\n      //deleting branch\n      return Promise.resolve();\n    }\n    return this.printBanner()\n      .then(() => {\n        timings.printBanner = process.hrtime(timings.start);\n        return this.openDBConnection();\n      })\n      .then(() => {\n        timings.openConnection = process.hrtime(timings.printBanner);\n        return this.primeRepository();\n      })\n      .then(() => {\n        timings.primeRepository = process.hrtime(timings.openConnection);\n        return this.loadApplication();\n      })\n      .then(() => {\n        timings.loadApplication = process.hrtime(timings.primeRepository);\n        return this.applicationEventLogger.log(new ExecutionLogEvent({\n          message: `Deploy starting. Hash: ${this.commitSha1}`,\n          type: 'DEPLOY',\n          application: this.application._id,\n          environment: 'live'\n        }));\n      }).then(() => {\n        timings.startDeployLog = process.hrtime(timings.loadApplication);\n        return this.createArchive();\n      }).then(() => {\n        timings.createArchive = process.hrtime(timings.startDeployLog);\n        return this.deployArchive();\n      }).then(() => {\n        timings.deployArchive = process.hrtime(timings.createArchive);\n        return this.npmInstall();\n      }).then(() => {\n        timings.npmInstall = process.hrtime(timings.deployArchive);\n        console.log('updating config');\n        return this.updateConfig();\n      }).then(() => {\n        timings.updateConfig = process.hrtime(timings.npmInstall);\n        return this.updateSchedules();\n      }).then(() => {\n        timings.updateSchedules = process.hrtime(timings.updateConfig);\n        return this.application.saveAsync();\n      }).then(() => {\n        timings.saveApplication = process.hrtime(timings.updateSchedules);\n        return this.linkReleaseDirectory();\n      }).then(() => {\n        timings.linkReleaseDirectory = process.hrtime(timings.saveApplication);\n        deleteDeployDir = false;\n        process.stdout.write('\\x1b[32mDeploy Completed Successfully\\x1b[37m\\n');\n      }).then(() => {\n        timings.done = process.hrtime(timings.linkReleaseDirectory);\n        return this.clearOldDirectories().catch(() => {});\n\n      }).then(() => {\n        timings.clearOldDirectories = process.hrtime(timings.done);\n        return Promise.all([\n          this.notificationLogger.log(new Notification({\n            applicationId: this.application._id,\n            notificationType: 'Update'\n          })),\n          this.publisher.publish(new Event({\n            eventId: uuid.v4().split('-').join(''),\n            applicationId: this.application._id,\n            eventName: 'POST:DEPLOY',\n            environment: 'live',\n            correlationId: uuid.v4(),\n            payload: {}\n          }))\n        ]);\n      }).then(() => {\n        timings.endDeployEvent = process.hrtime(timings.clearOldDirectories);\n        if (this.application) {\n          return this.applicationEventLogger.log(new ExecutionLogEvent({\n            message: `Deploy complete. Hash: ${this.commitSha1}`,\n            type: 'DEPLOY',\n            application: this.application._id,\n            environment: 'live'\n          }));\n        }\n      }).catch((err) => {\n        console.error(err);\n        logger.alert(err);\n        return Promise.resolve()\n          .then(() => {\n            if (this.application) {\n              return this.applicationEventLogger.log(new ExecutionLogEvent({\n                message: `Deploy failed. Hash: ${this.commitSha1}`,\n                type: 'DEPLOY',\n                application: this.application._id,\n                environment: 'live'\n              }));\n            }\n          }).then(() => {\n            if (deleteDeployDir) {\n              return fs.removeAsync(this.getDeployPath())\n                .catch((err2) => {\n                  console.error(err2);\n                });\n            }\n          }).then(() => {\n            throw err;\n          });\n      }).finally(() => {\n        timings.total = process.hrtime(timings.start);\n        logger.warn({\n          timings\n        }, 'final timings');\n        return this.closeDBConnection();\n      });\n  }\n  openDBConnection() {\n    return _mongoose.connectAsync(config.get('Hoist.mongo.core.connectionString'));\n  }\n  closeDBConnection() {\n    return _mongoose.disconnectAsync();\n  }\n  loadOrganisation() {\n    return Promise.resolve(this.organisation || Organisation.findOneAsync({\n      slug: this.organisationSlug\n    })).then((organisation) => {\n      this.organisation = organisation;\n      return this.organisation;\n    });\n  }\n  loadApplication() {\n    return Promise.resolve(this.application || this.loadOrganisation()\n      .then(() => {\n        return Application.findOneAsync({\n          organisation: this.organisation._id,\n          slug: this.applicationSlug\n        });\n      }).then((application) => {\n        this.application = application;\n      }));\n  }\n  updateConfig() {\n    return this.loadHoistJSON()\n      .then((hoistJson) => {\n        console.log('saving new settings');\n        this.application.settings.live = hoistJson;\n        this.application.markModified('settings.live');\n        this.application.lastDeploy.live = this.timestamp.toDate();\n        return this.repository.getCommit(this.commitSha1)\n          .then((commit) => {\n            this.application.lastCommit.live = {\n              message: commit.message(),\n              sha1: this.commitSha1,\n              user: commit.author().name() + ' ' + commit.author().email()\n            };\n\n          });\n\n\n      });\n  }\n  loadHoistJSON() {\n    return fs.readFileAsync(path.join(this.getDeployPath(), 'hoist.json'), {\n        encoding: 'utf8'\n      })\n      .then((hoistJson) => {\n        return Promise.try(() => {\n          console.log('parsing hoist.json file');\n          return jsonlint.parse(hoistJson);\n        }).catch(function (err) {\n\n          throw new errors.files.hoistJson.InvalidJsonError(err.message);\n        });\n      });\n  }\n  restoreNpmCache() {\n    return Promise.try(() => {\n      if (fs.existsSync(this.getNpmCachePath())) {\n        var progress = setInterval(function () {\n          process.stdout.write('#');\n        }, 10);\n        console.log('restoring npm cache');\n        return fs.copyAsync(this.getNpmCachePath(), path.join(this.getDeployPath(), 'node_modules')).finally(function () {\n          clearInterval(progress);\n          console.log('#\\n');\n        });\n      }\n    });\n  }\n  saveNpmCache() {\n    return Promise.try(() => {\n        console.log('saving npm cache');\n        if (fs.existsSync(this.getNpmCachePath())) {\n          return fs.removeAsync(this.getNpmCachePath());\n        }\n      })\n      .then(() => {\n        this.progress = setInterval(function () {\n          process.stdout.write('#');\n        }, 10);\n      })\n      .then(() => {\n        return Promise.resolve()\n          .then(() => {\n            if (fs.existsSync(path.join(this.getDeployPath(), 'node_modules'))) {\n              return fs.copyAsync(path.join(this.getDeployPath(), 'node_modules'), this.getNpmCachePath(), {\n                clobber: true\n              });\n            }\n          });\n      }).finally(() => {\n        clearInterval(this.progress);\n        process.stdout.write('#\\n');\n      });\n\n  }\n  npmInstall() {\n    var packageJsonPath = path.join(this.getDeployPath(), 'package.json');\n    //no package.json so don't do an npm install\n    if (!fs.existsSync(packageJsonPath)) {\n      return Promise.resolve(null);\n    }\n    return this.restoreNpmCache()\n      .then(() => {\n        console.log('\\x1b[32m--------> starting npm install\\x1b[37m\\n');\n        return new Promise((resolve, reject) => {\n          var npmProcess = require('child_process')\n            .spawn('npm', ['install', '--production', '--loglevel info', '--spin false'], {\n              cwd: this.getDeployPath(),\n              stdio: [process.stdin, process.stdout, 'pipe']\n            });\n          npmProcess.stderr.on('data', function (data) {\n            process.stdout.write('\\x1b[31m');\n            process.stdout.write(data);\n            process.stdout.write('\\x1b[37m');\n          });\n          npmProcess.on('exit', function (code) {\n            if (code === 0) {\n              process.stdout.write('\\x1b[32m<-------- npm install done\\x1b[37m\\n');\n              resolve();\n            } else {\n              reject(new Error('npm install failed'));\n            }\n          });\n        });\n      }).then(() => {\n        return this.saveNpmCache();\n      });\n\n\n  }\n  printBanner() {\n    return streamToPromise(fs.createReadStream(path.resolve(__dirname, './banner.txt')))\n      .then((banner) => {\n        process.stdout.write('\\x1b[32m');\n        process.stdout.write(banner);\n        process.stdout.write('\\x1b[37m');\n      })\n      .then(() => {\n        console.log('starting deployment');\n        console.log('\\x1b[42;30mref:\\x1b[40;37m', this.branch);\n        console.log('\\x1b[42;30mcommit:\\x1b[40;37m', this.commitSha1);\n        console.log('\\x1b[42;30moriginal:\\x1b[40;37m', this.originalSha1);\n      });\n  }\n  createArchive() {\n    return temp.openAsync({\n      suffix: '.tar.gz'\n    }).then((archive) => {\n      this.archive = archive;\n\n      return gitArchive({\n        commit: this.commitSha1,\n        outputPath: archive.path,\n        repoPath: process.cwd()\n      });\n    });\n  }\n  deployArchive() {\n    return targz.extractAsync(this.archive.path, this.getDeployPath());\n  }\n  updateSchedules() {\n    console.log('deleting existing schedules');\n    return this.getAgenda().cancelAsync({\n      'data.application': this.application._id\n    }).then(() => {\n      if (this.application.settings.live.schedules) {\n        return Promise.all(_.map(this.application.settings.live.schedules, (schedule, key) => {\n          var scheduleJob = Promise.promisifyAll(this.agenda.create('create:event2', {\n            application: this.application._id,\n            environment: 'live',\n            events: schedule.events\n          }));\n          scheduleJob.repeatEvery(key);\n          scheduleJob.computeNextRunAt();\n          console.log('adding schedule for ' + key);\n          return scheduleJob.saveAsync();\n        }, this));\n      }\n    });\n  }\n  clearOldDirectories() {\n    console.log('cleaning up');\n    return fs.readdirAsync(this.deployRoot)\n      .then((directories) => {\n        directories = _.sortBy(_.without(directories, '.npmcache'), function (dirName) {\n          return dirName;\n        });\n\n        //keep 3 directories\n        var directoriesToDelete = _.dropRight(directories, 3);\n\n        return Promise.all(_.map(directoriesToDelete, (dir) => {\n          return fs.removeAsync(path.join(this.deployRoot, dir));\n        }));\n      });\n  }\n  linkReleaseDirectory() {\n    console.log('marking release as current');\n    return Promise.resolve()\n      .then(() => {\n        if (fs.existsSync(this.getSymlinkPathPath())) {\n          return fs.unlinkAsync(this.getSymlinkPathPath());\n        }\n      })\n      .then(() => {\n        return fs.symlinkAsync(this.getDeployPath(), this.getSymlinkPathPath());\n      });\n  }\n\n}\n\nmodule.exports = Deployer;\n"
   },
   {
     "kind": "variable",
@@ -23,7 +23,7 @@
     "importPath": "hoist-git-listener/lib/deployer.js",
     "importStyle": null,
     "description": null,
-    "lineNumber": 25,
+    "lineNumber": 26,
     "undocument": true,
     "type": {
       "types": [
@@ -43,7 +43,7 @@
     "importPath": "hoist-git-listener/lib/deployer.js",
     "importStyle": null,
     "description": null,
-    "lineNumber": 26,
+    "lineNumber": 27,
     "undocument": true,
     "type": {
       "types": [
@@ -63,7 +63,7 @@
     "importPath": "hoist-git-listener/lib/deployer.js",
     "importStyle": null,
     "description": null,
-    "lineNumber": 27,
+    "lineNumber": 28,
     "undocument": true,
     "type": {
       "types": [
@@ -83,7 +83,7 @@
     "importPath": "hoist-git-listener/lib/deployer.js",
     "importStyle": null,
     "description": null,
-    "lineNumber": 28,
+    "lineNumber": 29,
     "undocument": true,
     "type": {
       "types": [
@@ -103,7 +103,7 @@
     "importPath": "hoist-git-listener/lib/deployer.js",
     "importStyle": null,
     "description": null,
-    "lineNumber": 32,
+    "lineNumber": 33,
     "undocument": true,
     "interface": false
   },
@@ -116,7 +116,7 @@
     "longname": "lib/deployer.js~Deployer#constructor",
     "access": null,
     "description": null,
-    "lineNumber": 33,
+    "lineNumber": 34,
     "undocument": true,
     "params": [
       {
@@ -137,7 +137,7 @@
     "longname": "lib/deployer.js~Deployer#timestamp",
     "access": null,
     "description": null,
-    "lineNumber": 36,
+    "lineNumber": 37,
     "undocument": true,
     "type": {
       "types": [
@@ -154,7 +154,7 @@
     "longname": "lib/deployer.js~Deployer#originalSha1",
     "access": null,
     "description": null,
-    "lineNumber": 37,
+    "lineNumber": 38,
     "undocument": true,
     "type": {
       "types": [
@@ -171,7 +171,7 @@
     "longname": "lib/deployer.js~Deployer#commitSha1",
     "access": null,
     "description": null,
-    "lineNumber": 38,
+    "lineNumber": 39,
     "undocument": true,
     "type": {
       "types": [
@@ -188,7 +188,7 @@
     "longname": "lib/deployer.js~Deployer#branch",
     "access": null,
     "description": null,
-    "lineNumber": 39,
+    "lineNumber": 40,
     "undocument": true,
     "type": {
       "types": [
@@ -205,7 +205,7 @@
     "longname": "lib/deployer.js~Deployer#publisher",
     "access": null,
     "description": null,
-    "lineNumber": 40,
+    "lineNumber": 41,
     "undocument": true,
     "type": {
       "types": [
@@ -222,7 +222,7 @@
     "longname": "lib/deployer.js~Deployer#applicationEventLogger",
     "access": null,
     "description": null,
-    "lineNumber": 41,
+    "lineNumber": 42,
     "undocument": true,
     "type": {
       "types": [
@@ -239,7 +239,7 @@
     "longname": "lib/deployer.js~Deployer#notificationLogger",
     "access": null,
     "description": null,
-    "lineNumber": 42,
+    "lineNumber": 43,
     "undocument": true,
     "type": {
       "types": [
@@ -256,7 +256,7 @@
     "longname": "lib/deployer.js~Deployer#organisationSlug",
     "access": null,
     "description": null,
-    "lineNumber": 48,
+    "lineNumber": 49,
     "undocument": true,
     "type": {
       "types": [
@@ -273,7 +273,7 @@
     "longname": "lib/deployer.js~Deployer#applicationSlug",
     "access": null,
     "description": null,
-    "lineNumber": 49,
+    "lineNumber": 50,
     "undocument": true,
     "type": {
       "types": [
@@ -290,7 +290,7 @@
     "longname": "lib/deployer.js~Deployer#deployRoot",
     "access": null,
     "description": null,
-    "lineNumber": 50,
+    "lineNumber": 51,
     "undocument": true,
     "type": {
       "types": [
@@ -307,7 +307,7 @@
     "longname": "lib/deployer.js~Deployer#deployFolder",
     "access": null,
     "description": null,
-    "lineNumber": 51,
+    "lineNumber": 52,
     "undocument": true,
     "type": {
       "types": [
@@ -324,7 +324,7 @@
     "longname": "lib/deployer.js~Deployer#getNpmCachePath",
     "access": null,
     "description": null,
-    "lineNumber": 53,
+    "lineNumber": 54,
     "undocument": true,
     "params": [],
     "return": {
@@ -343,7 +343,7 @@
     "longname": "lib/deployer.js~Deployer#getDeployPath",
     "access": null,
     "description": null,
-    "lineNumber": 56,
+    "lineNumber": 57,
     "undocument": true,
     "params": [],
     "return": {
@@ -362,7 +362,7 @@
     "longname": "lib/deployer.js~Deployer#getSymlinkPathPath",
     "access": null,
     "description": null,
-    "lineNumber": 59,
+    "lineNumber": 60,
     "undocument": true,
     "params": [],
     "return": {
@@ -381,7 +381,7 @@
     "longname": "lib/deployer.js~Deployer#primeRepository",
     "access": null,
     "description": null,
-    "lineNumber": 62,
+    "lineNumber": 63,
     "undocument": true,
     "params": [],
     "return": {
@@ -400,7 +400,7 @@
     "longname": "lib/deployer.js~Deployer#repository",
     "access": null,
     "description": null,
-    "lineNumber": 65,
+    "lineNumber": 66,
     "undocument": true,
     "type": {
       "types": [
@@ -417,7 +417,7 @@
     "longname": "lib/deployer.js~Deployer#getAgenda",
     "access": null,
     "description": null,
-    "lineNumber": 68,
+    "lineNumber": 69,
     "undocument": true,
     "params": [],
     "return": {
@@ -436,7 +436,7 @@
     "longname": "lib/deployer.js~Deployer#deploy",
     "access": null,
     "description": null,
-    "lineNumber": 75,
+    "lineNumber": 76,
     "undocument": true,
     "params": [],
     "return": {
@@ -455,7 +455,7 @@
     "longname": "lib/deployer.js~Deployer#openDBConnection",
     "access": null,
     "description": null,
-    "lineNumber": 170,
+    "lineNumber": 193,
     "undocument": true,
     "params": [],
     "return": {
@@ -474,7 +474,7 @@
     "longname": "lib/deployer.js~Deployer#closeDBConnection",
     "access": null,
     "description": null,
-    "lineNumber": 173,
+    "lineNumber": 196,
     "undocument": true,
     "params": [],
     "return": {
@@ -493,7 +493,7 @@
     "longname": "lib/deployer.js~Deployer#loadOrganisation",
     "access": null,
     "description": null,
-    "lineNumber": 176,
+    "lineNumber": 199,
     "undocument": true,
     "params": [],
     "return": {
@@ -512,7 +512,7 @@
     "longname": "lib/deployer.js~Deployer#organisation",
     "access": null,
     "description": null,
-    "lineNumber": 180,
+    "lineNumber": 203,
     "undocument": true,
     "type": {
       "types": [
@@ -529,7 +529,7 @@
     "longname": "lib/deployer.js~Deployer#loadApplication",
     "access": null,
     "description": null,
-    "lineNumber": 184,
+    "lineNumber": 207,
     "undocument": true,
     "params": [],
     "return": {
@@ -548,7 +548,7 @@
     "longname": "lib/deployer.js~Deployer#application",
     "access": null,
     "description": null,
-    "lineNumber": 192,
+    "lineNumber": 215,
     "undocument": true,
     "type": {
       "types": [
@@ -565,7 +565,7 @@
     "longname": "lib/deployer.js~Deployer#updateConfig",
     "access": null,
     "description": null,
-    "lineNumber": 195,
+    "lineNumber": 218,
     "undocument": true,
     "params": [],
     "return": {
@@ -584,7 +584,7 @@
     "longname": "lib/deployer.js~Deployer#loadHoistJSON",
     "access": null,
     "description": null,
-    "lineNumber": 215,
+    "lineNumber": 238,
     "undocument": true,
     "params": [],
     "return": {
@@ -603,7 +603,7 @@
     "longname": "lib/deployer.js~Deployer#restoreNpmCache",
     "access": null,
     "description": null,
-    "lineNumber": 229,
+    "lineNumber": 252,
     "undocument": true,
     "params": [],
     "return": {
@@ -622,7 +622,7 @@
     "longname": "lib/deployer.js~Deployer#saveNpmCache",
     "access": null,
     "description": null,
-    "lineNumber": 243,
+    "lineNumber": 266,
     "undocument": true,
     "params": [],
     "return": {
@@ -641,7 +641,7 @@
     "longname": "lib/deployer.js~Deployer#progress",
     "access": null,
     "description": null,
-    "lineNumber": 251,
+    "lineNumber": 274,
     "undocument": true,
     "type": {
       "types": [
@@ -658,7 +658,7 @@
     "longname": "lib/deployer.js~Deployer#npmInstall",
     "access": null,
     "description": null,
-    "lineNumber": 270,
+    "lineNumber": 293,
     "undocument": true,
     "params": [],
     "return": {
@@ -677,7 +677,7 @@
     "longname": "lib/deployer.js~Deployer#printBanner",
     "access": null,
     "description": null,
-    "lineNumber": 305,
+    "lineNumber": 328,
     "undocument": true,
     "params": [],
     "return": {
@@ -696,7 +696,7 @@
     "longname": "lib/deployer.js~Deployer#createArchive",
     "access": null,
     "description": null,
-    "lineNumber": 319,
+    "lineNumber": 342,
     "undocument": true,
     "params": [],
     "return": {
@@ -715,7 +715,7 @@
     "longname": "lib/deployer.js~Deployer#archive",
     "access": null,
     "description": null,
-    "lineNumber": 323,
+    "lineNumber": 346,
     "undocument": true,
     "type": {
       "types": [
@@ -732,7 +732,7 @@
     "longname": "lib/deployer.js~Deployer#deployArchive",
     "access": null,
     "description": null,
-    "lineNumber": 332,
+    "lineNumber": 355,
     "undocument": true,
     "params": [],
     "return": {
@@ -751,7 +751,7 @@
     "longname": "lib/deployer.js~Deployer#updateSchedules",
     "access": null,
     "description": null,
-    "lineNumber": 335,
+    "lineNumber": 358,
     "undocument": true,
     "params": [],
     "return": {
@@ -770,7 +770,7 @@
     "longname": "lib/deployer.js~Deployer#clearOldDirectories",
     "access": null,
     "description": null,
-    "lineNumber": 355,
+    "lineNumber": 378,
     "undocument": true,
     "params": [],
     "return": {
@@ -789,7 +789,7 @@
     "longname": "lib/deployer.js~Deployer#linkReleaseDirectory",
     "access": null,
     "description": null,
-    "lineNumber": 371,
+    "lineNumber": 394,
     "undocument": true,
     "params": [],
     "return": {
@@ -809,7 +809,7 @@
     "access": null,
     "description": null,
     "lineNumber": 1,
-    "content": "'use strict';\nimport path from 'path';\nimport fs from 'fs';\nimport {\n  HoistUser, Organisation, Application\n}\nfrom '@hoist/model';\nimport logger from '@hoist/logger';\nimport errors from '@hoist/errors';\nimport Bluebird from 'bluebird';\n\nBluebird.promisifyAll(fs);\n\nvar hookFile = path.resolve(__dirname, './hook-include.sh');\n\nclass GitActionListener {\n  constructor() {\n    this._logger = logger.child({\n      cls: this.constructor.name\n    });\n  }\n  bindToRepository(repos) {\n    this._logger.info('binding to repository');\n    repos.on('push', (push) => {\n      return this.push(push);\n    });\n\n  }\n\n  createHookFile(template, target) {\n    this._logger.info('creating hook file');\n    return fs.readFileAsync(template, {\n      encoding: 'utf8'\n    }).then((content) => {\n      content = content.replace('#{dirname}', path.resolve(__dirname));\n      return fs.writeFileAsync(target, content, {\n        mode: '0755'\n      });\n    });\n  }\n\n  push(push) {\n    this._logger.info(\"received git push\");\n\n    return this.processSecurity(push, 'push')\n      .then((gitObject) => {\n        this._logger.info(\"security processed\");\n        let postReceiveHookFile = path.resolve(gitObject.cwd, './hooks/post-receive');\n        fs.unlink(postReceiveHookFile, function () {\n          //throw away error as we don't care\n        });\n        let preRecieveHookFile = path.resolve(gitObject.cwd, './hooks/pre-receive');\n        return this.createHookFile(hookFile, preRecieveHookFile);\n      }).then(() => {\n        push.accept();\n      }).catch((err) => {\n        let errCode = 500;\n        if (err.code) {\n          errCode = parseInt(err.code);\n        }\n        this._logger.error(err);\n        logger.alert(err);\n        push.reject(errCode, err.message);\n      });\n  }\n\n  processSecurity(gitObject, method) {\n    var auth, creds, plainAuth, req;\n    req = gitObject.request;\n    auth = req.headers.authorization;\n    if (!auth) {\n      this._logger.warn(\"no auth header present\");\n      return Promise.reject(new errors.Http401Error('Missing Authentication Header'));\n    } else {\n      this._logger.info({\n        authHeader: auth\n      }, \"processing auth header\");\n      plainAuth = new Buffer(auth.split(' ')[1], 'base64').toString();\n      this._logger.info({\n        plainHeader: plainAuth\n      }, \"processing plain header\");\n      creds = plainAuth.split(':');\n      return this.permissableMethod(creds[0], creds[1], method, gitObject);\n    }\n  }\n\n  permissableMethod(username, password, method, gitObject) {\n    var repoSplit = gitObject.repo.split('/');\n\n    var gitRepo = repoSplit[1];\n    if (gitRepo.length > 4) {\n      gitRepo = gitRepo.indexOf('.git') === gitRepo.length - 4 ? gitRepo.slice(0, -4) : gitRepo;\n    }\n    var gitFolder = repoSplit[0];\n    this._logger.info({\n      gitFolder: gitFolder,\n      gitRepo: gitRepo\n    }, 'git credentials');\n    return this.getUser(username, password)\n      .then((user) => {\n        if (!user) {\n          throw new errors.Http401Error({\n            message: 'Incorrect username or password provided'\n          });\n        }\n        // check if user is in organisation\n        return Organisation.findOneAsync({\n          slug: gitFolder,\n          _id: {\n            $in: user.organisations\n          }\n        });\n      }).then((org) => {\n        if (!org) {\n          this._logger.warn('unable to load organisation');\n          throw new errors.Http401Error(`The specified user doesn't have access to this repository, or the repository doesn't exist`);\n        }\n        this._logger.info({\n          org: org._id\n        }, 'loaded organisation');\n        //check if organisation has application\n\n        return Application.findOneAsync({\n          slug: gitRepo,\n          organisation: org._id\n        });\n      }).then((app) => {\n        if (!app) {\n          this._logger.warn('unable to load application');\n          throw new errors.Http401Error(`The specified user doesn't have access to this repository, or the repository doesn't exist`);\n        }\n        this._logger.info({\n          app: app._id\n        }, 'loaded app');\n        return gitObject;\n      });\n  }\n\n  getUser(username, password) {\n    return HoistUser.findOneAsync({\n      emailAddresses: {\n        $elemMatch: {\n          address: username.toLowerCase()\n        }\n      }\n    }).then((user) => {\n      if (user) {\n        this._logger.info({\n          user: user._id\n        }, 'loaded user');\n      } else {\n        this._logger.warn('no user found');\n      }\n      if (user && user.passwordHash && user.passwordHash.length > 0 && user.verifyPassword(password)) {\n        return user;\n      } else if (user && (!user.passwordHash || user.passwordHash.length < 1)) {\n        this._logger.warn('user doesn\\'t have a password');\n        throw new errors.user.credentials.NoPasswordError();\n      } else {\n        this._logger.warn('user doesnt exist or password wrong');\n        return false;\n      }\n    });\n  }\n\n}\n\n\n\nexport default GitActionListener;\n"
+    "content": "'use strict';\nimport path from 'path';\nimport fs from 'fs';\nimport {\n  HoistUser, Organisation, Application\n}\nfrom '@hoist/model';\nimport logger from '@hoist/logger';\nimport errors from '@hoist/errors';\nimport Bluebird from 'bluebird';\n\nBluebird.promisifyAll(fs);\n\nvar hookFile = path.resolve(__dirname, './hook-include.sh');\n\nclass GitActionListener {\n  constructor() {\n    this._logger = logger.child({\n      cls: this.constructor.name\n    });\n  }\n  bindToRepository(repos) {\n    this._logger.info('binding to repository');\n    repos.on('push', (push) => {\n      return this.push(push);\n    });\n\n  }\n\n  createHookFile(template, target) {\n    this._logger.info('creating hook file');\n    return fs.readFileAsync(template, {\n      encoding: 'utf8'\n    }).then((content) => {\n      content = content.replace('#{dirname}', path.resolve(__dirname));\n      return fs.writeFileAsync(target, content, {\n        mode: '0755'\n      });\n    });\n  }\n\n  push(push) {\n    this._logger.info(\"received git push\");\n\n    return this.processSecurity(push, 'push')\n      .then((gitObject) => {\n        this._logger.info(\"security processed\");\n        let postReceiveHookFile = path.resolve(gitObject.cwd, './hooks/post-receive');\n        fs.unlink(postReceiveHookFile, function () {\n          //throw away error as we don't care\n        });\n        let preRecieveHookFile = path.resolve(gitObject.cwd, './hooks/pre-receive');\n        return this.createHookFile(hookFile, preRecieveHookFile);\n      }).then(() => {\n        push.accept();\n      }).catch((err) => {\n        let errCode = 500;\n        if (err.code) {\n          errCode = parseInt(err.code);\n        }\n        this._logger.error(err);\n        logger.alert(err);\n        push.reject(errCode, err.message);\n      });\n  }\n\n  processSecurity(gitObject, method) {\n    var auth, creds, plainAuth, req;\n    req = gitObject.request;\n    auth = req.headers.authorization;\n    if (!auth) {\n      this._logger.warn(\"no auth header present\");\n      return Promise.reject(new errors.Http401Error('Missing Authentication Header'));\n    } else {\n      this._logger.info(\"processing auth header\");\n      plainAuth = new Buffer(auth.split(' ')[1], 'base64').toString();\n      this._logger.info(\"processing plain header\");\n      creds = plainAuth.split(':');\n      return this.permissableMethod(creds[0], creds[1], method, gitObject);\n    }\n  }\n\n  permissableMethod(username, password, method, gitObject) {\n    var repoSplit = gitObject.repo.split('/');\n\n    var gitRepo = repoSplit[1];\n    if (gitRepo.length > 4) {\n      gitRepo = gitRepo.indexOf('.git') === gitRepo.length - 4 ? gitRepo.slice(0, -4) : gitRepo;\n    }\n    var gitFolder = repoSplit[0];\n    this._logger.info({\n      gitFolder: gitFolder,\n      gitRepo: gitRepo\n    }, 'git credentials');\n    return this.getUser(username, password)\n      .then((user) => {\n        if (!user) {\n          throw new errors.Http401Error({\n            message: 'Incorrect username or password provided'\n          });\n        }\n        // check if user is in organisation\n        return Organisation.findOneAsync({\n          slug: gitFolder,\n          _id: {\n            $in: user.organisations\n          }\n        });\n      }).then((org) => {\n        if (!org) {\n          this._logger.warn('unable to load organisation');\n          throw new errors.Http401Error(`The specified user doesn't have access to this repository, or the repository doesn't exist`);\n        }\n        this._logger.info({\n          org: org._id\n        }, 'loaded organisation');\n        //check if organisation has application\n\n        return Application.findOneAsync({\n          slug: gitRepo,\n          organisation: org._id\n        });\n      }).then((app) => {\n        if (!app) {\n          this._logger.warn('unable to load application');\n          throw new errors.Http401Error(`The specified user doesn't have access to this repository, or the repository doesn't exist`);\n        }\n        this._logger.info({\n          app: app._id\n        }, 'loaded app');\n        return gitObject;\n      });\n  }\n\n  getUser(username, password) {\n    return HoistUser.findOneAsync({\n      emailAddresses: {\n        $elemMatch: {\n          address: username.toLowerCase()\n        }\n      }\n    }).then((user) => {\n      if (user) {\n        this._logger.info({\n          user: user._id\n        }, 'loaded user');\n      } else {\n        this._logger.warn('no user found');\n      }\n      if (user && user.passwordHash && user.passwordHash.length > 0 && user.verifyPassword(password)) {\n        return user;\n      } else if (user && (!user.passwordHash || user.passwordHash.length < 1)) {\n        this._logger.warn('user doesn\\'t have a password');\n        throw new errors.user.credentials.NoPasswordError();\n      } else {\n        this._logger.warn('user doesnt exist or password wrong');\n        return false;\n      }\n    });\n  }\n\n}\n\n\n\nexport default GitActionListener;\n"
   },
   {
     "kind": "variable",
@@ -998,7 +998,7 @@
     "longname": "lib/git_action_listener.js~GitActionListener#permissableMethod",
     "access": null,
     "description": null,
-    "lineNumber": 87,
+    "lineNumber": 83,
     "undocument": true,
     "params": [
       {
@@ -1042,7 +1042,7 @@
     "longname": "lib/git_action_listener.js~GitActionListener#getUser",
     "access": null,
     "description": null,
-    "lineNumber": 139,
+    "lineNumber": 135,
     "undocument": true,
     "params": [
       {
@@ -1077,7 +1077,7 @@
     "importPath": "hoist-git-listener/lib/git_action_listener.js",
     "importStyle": "gitActionListener",
     "description": null,
-    "lineNumber": 170,
+    "lineNumber": 166,
     "undocument": true,
     "type": {
       "types": [
@@ -1095,7 +1095,7 @@
     "access": null,
     "description": null,
     "lineNumber": 1,
-    "content": "'use strict';\n/* jshint multistr:true */\nglobal.Promise = require('bluebird');\nrequire(\"babel/register\");\nvar path = require('path');\nvar configPath = path.resolve(__filename, '../../', 'config');\nprocess.env.NODE_CONFIG_DIR = configPath;\nvar logger = require('@hoist/logger');\nvar Deployer = require('./deployer');\nvar _ = require('lodash');\nvar streamToPromise = require('stream-to-promise');\nlogger.streams = _.reject(logger.streams, function (stream) {\n  return stream.name === 'console';\n});\nstreamToPromise(process.stdin)\n  .then(function (input) {\n    return new Deployer(input);\n  }).then(function (deployer) {\n    return deployer.deploy();\n  }).catch(function (err) {\n    console.log(err.message);\n    process.exit(1);\n  }).finally(function () {\n    process.exit(0);\n  });\n"
+    "content": "'use strict';\n/* jshint multistr:true */\nvar path = require('path');\nvar configPath = path.resolve(__filename, '../../', 'config');\n\nprocess.env.MUTE_LOGS = true;\nprocess.env.NODE_CONFIG_DIR = configPath;\n\nvar logger = require('@hoist/logger');\nvar Deployer = require('./deployer');\nvar streamToPromise = require('stream-to-promise');\n\nlogger.info('starting deployment');\nstreamToPromise(process.stdin)\n  .then(function (input) {\n    logger.info('creating deployer');\n    return new Deployer(input);\n  }).then(function (deployer) {\n    logger.info('starting deploy');\n    return deployer.deploy();\n  }).catch(function (err) {\n    logger.error(err);\n    console.log(err.message);\n    process.exit(1);\n  }).finally(function () {\n    logger.info('done');\n    process.exit(0);\n  });\n"
   },
   {
     "kind": "variable",
@@ -1109,7 +1109,7 @@
     "importPath": "hoist-git-listener/lib/hook.js",
     "importStyle": null,
     "description": null,
-    "lineNumber": 5,
+    "lineNumber": 3,
     "undocument": true,
     "type": {
       "types": [
@@ -1129,7 +1129,7 @@
     "importPath": "hoist-git-listener/lib/hook.js",
     "importStyle": null,
     "description": null,
-    "lineNumber": 6,
+    "lineNumber": 4,
     "undocument": true,
     "type": {
       "types": [
@@ -1149,7 +1149,7 @@
     "importPath": "hoist-git-listener/lib/hook.js",
     "importStyle": null,
     "description": null,
-    "lineNumber": 8,
+    "lineNumber": 9,
     "undocument": true,
     "type": {
       "types": [
@@ -1164,26 +1164,6 @@
     "name": "Deployer",
     "memberof": "lib/hook.js",
     "longname": "lib/hook.js~Deployer",
-    "access": null,
-    "export": false,
-    "importPath": "hoist-git-listener/lib/hook.js",
-    "importStyle": null,
-    "description": null,
-    "lineNumber": 9,
-    "undocument": true,
-    "type": {
-      "types": [
-        "*"
-      ]
-    }
-  },
-  {
-    "kind": "variable",
-    "static": true,
-    "variation": null,
-    "name": "_",
-    "memberof": "lib/hook.js",
-    "longname": "lib/hook.js~_",
     "access": null,
     "export": false,
     "importPath": "hoist-git-listener/lib/hook.js",
@@ -1227,7 +1207,7 @@
     "access": null,
     "description": null,
     "lineNumber": 1,
-    "content": "'use strict';\nvar http = require('http');\nvar pushover = require('pushover');\nvar config = require('config');\nvar repos = pushover(config.get('Hoist.filePaths.repositories'), {\n  autoCreate: true\n});\nvar GitActionListener = require('./git_action_listener');\nvar BBPromise = require('bluebird');\nvar mongoose = BBPromise.promisifyAll(require('@hoist/model')._mongoose);\nvar logger = require('@hoist/logger');\nrepos.on('error', function (err) {\n  console.warn(err);\n});\n\nmodule.exports = {\n  createServer: function () {\n    var listener = new GitActionListener();\n    listener.bindToRepository(repos);\n    return BBPromise.promisifyAll(http.createServer(function (req, res) {\n      logger.info(\"got a git request\");\n      if (!req.headers || !req.headers.authorization) {\n        logger.warn(\"no auth header present\");\n        res.setHeader(\"WWW-Authenticate\", 'Basic');\n        res.writeHead(401);\n        res.end(\"invalid username or password\");\n      } else {\n        logger.info('sending to handler');\n        repos.handle(req, res);\n      }\n    }));\n  },\n  start: function (done) {\n    return BBPromise.try(function () {\n        var connected = false;\n        if (mongoose.connection && mongoose.connection.readyState > 0) {\n          connected = true;\n        }\n        return connected;\n      })\n      .bind(this)\n      .then(function (connected) {\n        if (!connected) {\n          return mongoose.connectAsync(config.get('Hoist.mongo.core.connectionString'));\n        } else {\n          return null;\n        }\n      }).then(function () {\n        /* istanbul ignore if */\n        if (this._server) {\n          return BBPromise.resolve(null);\n        }\n        this._server = this.createServer();\n        return this._server.listenAsync(config.get('Hoist.server.port'), config.get('Hoist.server.host'));\n      }).then(function () {\n        logger.info('listening for git actions on port, ' + config.get('Hoist.server.port'));\n      }).nodeify(done);\n  },\n  stop: function (done) {\n    return BBPromise.try(function () {\n      var connected = false;\n      /* istanbul ignore else */\n      if (mongoose.connection && mongoose.connection.readyState > 0 && mongoose.connection.readyState < 3) {\n        connected = true;\n      }\n      return connected;\n    }).bind(this).then(function (connected) {\n      /* istanbul ignore else */\n      if (connected) {\n        return mongoose.disconnectAsync();\n      }\n    }).then(function () {\n      /* istanbul ignore if */\n      if (!this._server) {\n        return BBPromise.resolve(null);\n      }\n      return this._server.closeAsync();\n    }).then(function () {\n      delete this._server;\n    }).nodeify(done);\n  }\n};\n"
+    "content": "'use strict';\nvar http = require('http');\nvar pushover = require('pushover');\nvar config = require('config');\nvar repos = pushover(config.get('Hoist.filePaths.repositories'), {\n  autoCreate: true\n});\nvar GitActionListener = require('./git_action_listener');\nvar BBPromise = require('bluebird');\nvar mongoose = BBPromise.promisifyAll(require('@hoist/model')._mongoose);\nvar logger = require('@hoist/logger');\n\nrepos.on('error', function (err) {\n  console.warn(err);\n});\n\nmodule.exports = {\n  createServer: function () {\n    var listener = new GitActionListener();\n    listener.bindToRepository(repos);\n    return BBPromise.promisifyAll(http.createServer(function (req, res) {\n      logger.info(\"got a git request\");\n      if (!req.headers || !req.headers.authorization) {\n        logger.warn(\"no auth header present\");\n        res.setHeader(\"WWW-Authenticate\", 'Basic');\n        res.writeHead(401);\n        res.end(\"invalid username or password\");\n      } else {\n        logger.info('sending to handler');\n        repos.handle(req, res);\n      }\n    }));\n  },\n  start: function (done) {\n    return BBPromise.try(function () {\n        var connected = false;\n        if (mongoose.connection && mongoose.connection.readyState > 0) {\n          connected = true;\n        }\n        return connected;\n      })\n      .bind(this)\n      .then(function (connected) {\n        if (!connected) {\n          return mongoose.connectAsync(config.get('Hoist.mongo.core.connectionString'));\n        } else {\n          return null;\n        }\n      }).then(function () {\n        /* istanbul ignore if */\n        if (this._server) {\n          return BBPromise.resolve(null);\n        }\n        this._server = this.createServer();\n        return this._server.listenAsync(config.get('Hoist.server.port'), config.get('Hoist.server.host'));\n      }).then(function () {\n        logger.info('listening for git actions on port, ' + config.get('Hoist.server.port'));\n      }).nodeify(done);\n  },\n  stop: function (done) {\n    return BBPromise.try(function () {\n      var connected = false;\n      /* istanbul ignore else */\n      if (mongoose.connection && mongoose.connection.readyState > 0 && mongoose.connection.readyState < 3) {\n        connected = true;\n      }\n      return connected;\n    }).bind(this).then(function (connected) {\n      /* istanbul ignore else */\n      if (connected) {\n        return mongoose.disconnectAsync();\n      }\n    }).then(function () {\n      /* istanbul ignore if */\n      if (!this._server) {\n        return BBPromise.resolve(null);\n      }\n      return this._server.closeAsync();\n    }).then(function () {\n      delete this._server;\n    }).nodeify(done);\n  }\n};\n"
   },
   {
     "kind": "variable",
