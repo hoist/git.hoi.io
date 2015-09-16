@@ -451,7 +451,12 @@ class Deployer {
     return Promise.resolve()
       .then(() =&gt; {
         if (fs.existsSync(this.getSymlinkPathPath())) {
-          return fs.unlinkAsync(this.getSymlinkPathPath());
+          var stat = fs.statSync(this.getSymlinkPathPath());
+          if (stat.isDirectory()) {
+            return fs.rmdirAsync(this.getSymlinkPathPath());
+          } else {
+            return fs.unlinkAsync(this.getSymlinkPathPath());
+          }
         }
       })
       .then(() =&gt; {
