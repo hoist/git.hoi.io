@@ -7,8 +7,8 @@ User=core
 Restart=always
 ExecStartPre=-/usr/bin/docker kill git.hoi.io-%i
 ExecStartPre=-/usr/bin/docker rm git.hoi.io-%i
-ExecStartPre=-/usr/bin/docker pull quay.io/hoist/git.hoi.io:master
-ExecStart=/usr/bin/docker run --name git.hoi.io-%i  -e "SERVICE_8000_TAGS=http,nodejs,git,production,https-hoi-io" -e "SERVICE_8000_NAME=git" -e "NODE_ENV=production" --volumes-from config -P quay.io/hoist/git.hoi.io:master
+ExecStartPre=-/usr/bin/docker pull hoist/git.hoi.io:master
+ExecStart=/usr/bin/docker run --name git.hoi.io-%i  -e "SERVICE_8000_TAGS=http,nodejs,git,production,https-hoi-io" -e "SERVICE_8000_NAME=git" -e "NODE_ENV=production" --volumes-from config -P hoist/git.hoi.io:master
 ExecStop=/usr/bin/docker stop git.hoi.io-%i
 TimeoutStartSec=30m
 

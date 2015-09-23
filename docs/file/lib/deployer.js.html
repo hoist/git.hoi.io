@@ -77,6 +77,9 @@ import jsonlint from &apos;jsonlint&apos;;
 import Git from &apos;nodegit&apos;;
 import Agenda from &apos;agenda&apos;;
 import _ from &apos;lodash&apos;;
+import rimraf from &apos;rimraf&apos;;
+
+let rimrafAsync = Promise.promisify(rimraf);
 
 let fs = Promise.promisifyAll(require(&apos;fs-extra&apos;));
 let temp = Promise.promisifyAll(require(&apos;temp&apos;));
@@ -453,7 +456,7 @@ class Deployer {
         if (fs.existsSync(this.getSymlinkPathPath())) {
           var stat = fs.lstatSync(this.getSymlinkPathPath());
           if ((!stat.isSymbolicLink()) &amp;&amp; stat.isDirectory()) {
-            return fs.rmdirAsync(this.getSymlinkPathPath());
+            return rimrafAsync(this.getSymlinkPathPath());
           } else {
             return fs.unlinkAsync(this.getSymlinkPathPath());
           }

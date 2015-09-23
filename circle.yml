@@ -21,13 +21,13 @@ dependencies:
   override:
     - mkdir -p ~/docker
     - if [[ -e ~/docker/git.hoi.io.tar ]]; then docker load -i ~/docker/git.hoi.io.tar; fi
-    - docker build -t quay.io/hoist/git.hoi.io:${CIRCLE_BRANCH//feature\//} .
-    - docker save "quay.io/hoist/git.hoi.io" > ~/docker/git.hoi.io.tar
+    - docker build -t hoist/git.hoi.io:${CIRCLE_BRANCH//feature\//} .
+    - docker save "hoist/git.hoi.io" > ~/docker/git.hoi.io.tar
 test:
   override:
     - docker kill test; true;
     - docker rm test; true;
-    - docker run --name test --entrypoint gulp quay.io/hoist/git.hoi.io:${CIRCLE_BRANCH//feature\//} test
+    - docker run --name test --entrypoint gulp hoist/git.hoi.io:${CIRCLE_BRANCH//feature\//} test
     - docker cp test:/usr/src/app/coverage ~/
 general:
   artifacts:
@@ -40,8 +40,8 @@ deployment:
     branch: [master,/feature\/.*/]
     owner: hoist
     commands:
-      - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS quay.io
-      - docker push quay.io/hoist/git.hoi.io:${CIRCLE_BRANCH//feature\//}
+      - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
+      - docker push hoist/git.hoi.io:${CIRCLE_BRANCH//feature\//}
 notify:
   webhooks:
     - url: https://overlord.hoist.io/api/webhook/circleci?api_token=xc1zrzacmxp9samlj9nya4gzay
