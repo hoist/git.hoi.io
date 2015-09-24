@@ -11,7 +11,4 @@ cp /config/docker.json ./config/docker.json
 
 #start app
 echo "starting app"
-node app.js &>/dev/null &
-
-echo "starting log agregator"
-bunyansub -o long --color
+node app.js
