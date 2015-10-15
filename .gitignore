@@ -48,3 +48,4 @@ config/development.json
 
 tests/fixtures/checkouts/**/*
 tests/fixtures/deploys/**/*
+.npmrc
