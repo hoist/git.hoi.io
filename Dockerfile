@@ -4,8 +4,7 @@ USER root
 
 #copy npmrc to enable login to private npm
 COPY .npmrc /home/hoist/.npmrc
-RUN npm unlink babel -g
-RUN npm install babel@5 -g
+RUN npm uninstall babel -g && npm install babel-cli -g
 
 RUN chown hoist:hoist /home/hoist/.npmrc
 

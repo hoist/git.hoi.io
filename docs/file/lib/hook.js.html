@@ -47,7 +47,7 @@ process.env.MUTE_LOGS = true;
 process.env.NODE_CONFIG_DIR = configPath;
 
 var logger = require(&apos;@hoist/logger&apos;);
-var Deployer = require(&apos;./deployer&apos;).default;
+var Deployer = require(&apos;./deployer&apos;);
 var streamToPromise = require(&apos;stream-to-promise&apos;);
 
 logger.info(&apos;starting deployment&apos;);
