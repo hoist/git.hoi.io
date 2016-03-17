@@ -1,11 +1,21 @@
 {
   "coverage": "0%",
-  "expectCount": 9,
+  "expectCount": 8,
   "actualCount": 0,
   "files": {
     "lib/git_action_listener.js": {
-      "expectCount": 9,
-      "actualCount": 0
+      "expectCount": 8,
+      "actualCount": 0,
+      "undocumentLines": [
+        16,
+        22,
+        17,
+        30,
+        135,
+        83,
+        67,
+        42
+      ]
     }
   }
 }

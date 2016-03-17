@@ -1,12 +1,12 @@
 'use strict';
 require('../bootstrap');
-var sinon = require('sinon');
-var expect = require('chai').expect;
-var http = require('http');
-var BBPromise = require('bluebird');
-var GitActionListener = require('../../lib/git_action_listener');
-var mongoose = require('@hoist/model')._mongoose;
-var hoistServer = require('../../lib/server');
+import sinon from 'sinon';
+import {expect} from 'chai';
+import http from 'http';
+import BBPromise from 'bluebird';
+import GitActionListener from '../../lib/git_action_listener';
+import {_mongoose as mongoose} from '@hoist/model';
+import hoistServer from '../../lib/server';
 
 describe('server', function () {
   describe('#stop', function () {

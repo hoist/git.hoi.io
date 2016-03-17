@@ -1,8 +1,10 @@
-FROM hoist/core-box:latest
+FROM hoist/core-box:4
 
 USER root
+
 #copy npmrc to enable login to private npm
 COPY .npmrc /home/hoist/.npmrc
+RUN npm uninstall babel -g && npm install babel-cli -g
 
 RUN chown hoist:hoist /home/hoist/.npmrc
 
@@ -10,6 +12,7 @@ USER hoist
 
 ADD package.json /usr/src/app/package.json
 RUN npm install
+
 
 #ensure nodemon doesn't create heapdumps
 ENV NODE_HEAPDUMP_OPTIONS=nosignal

@@ -6,12 +6,6 @@ window.esdocSearchIndex = [
     "class"
   ],
   [
-    "hoist-git-listener/lib/git_action_listener.js~gitactionlistener",
-    "variable/index.html#static-variable-gitActionListener",
-    "<span>gitActionListener</span> <span class=\"search-result-import-path\">hoist-git-listener/lib/git_action_listener.js</span>",
-    "variable"
-  ],
-  [
     "builtinexternal/ecmascriptexternal.js~array",
     "external/index.html",
     "BuiltinExternal/ECMAScriptExternal.js~Array",
@@ -291,6 +285,12 @@ window.esdocSearchIndex = [
     "builtinexternal/ecmascriptexternal.js~undefined",
     "external/index.html",
     "BuiltinExternal/ECMAScriptExternal.js~undefined",
+    "external"
+  ],
+  [
+    "builtinexternal/webapiexternal.js~audiocontext",
+    "external/index.html",
+    "BuiltinExternal/WebAPIExternal.js~AudioContext",
     "external"
   ],
   [

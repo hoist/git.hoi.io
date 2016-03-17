@@ -9,12 +9,14 @@
   <script src="script/prettify/prettify.js"></script>
   
   
+  <script src="script/manual.js"></script>
 </head>
-<body class="layout-container">
+<body class="layout-container" data-ice="rootContainer">
 
 <header>
   <a href="./">Home</a>
-  <a href="identifiers.html">Identifier</a>
+  
+  <a href="identifiers.html">Reference</a>
   <a href="source.html">Source</a>
   <a href="test.html" data-ice="testLink">Test</a>
   <a data-ice="repoURL" href="https://github.com/hoist/hoist-git-listener.git" class="repo-url-github">Repository</a>
@@ -27,33 +29,16 @@
   </div>
 </header>
 
-<nav class="navigation" data-ice="nav"><div data-ice="classWrap">
-  <h2>Class</h2>
+<nav class="navigation" data-ice="nav"><div>
   <ul>
     
-  <li data-ice="classDoc"><span><a href="class/lib/git_action_listener.js~GitActionListener.html">GitActionListener</a></span></li>
+  <li data-ice="doc"><span data-ice="kind" class="kind-class">C</span><span data-ice="name"><span><a href="class/lib/git_action_listener.js~GitActionListener.html">GitActionListener</a></span></span></li>
 </ul>
 </div>
-
-
-
-
-
-<div data-ice="variableWrap">
-  <h2><a href="variable/">Variable</a></h2>
-  <ul>
-    
-  <li data-ice="variableDoc"><span><a href="variable/index.html#static-variable-gitActionListener">gitActionListener</a></span></li>
-</ul>
-</div>
-
-
-
-
 </nav>
 
 <div class="content" data-ice="content"><h1 data-ice="title">lib/deployer.js</h1>
-<pre class="source-code line-number"><code class="prettyprint linenums" data-ice="content">&apos;use strict&apos;;
+<pre class="source-code line-number raw-source-code"><code class="prettyprint linenums" data-ice="content">&apos;use strict&apos;;
 import Promise from &apos;bluebird&apos;;
 import streamToPromise from &apos;stream-to-promise&apos;;
 import Targz from &apos;tar.gz&apos;;
@@ -63,7 +48,11 @@ import moment from &apos;moment&apos;;
 import logger from &apos;@hoist/logger&apos;;
 import uuid from &apos;uuid&apos;;
 import {
-  _mongoose, Organisation, Application, ExecutionLogEvent, Event
+  _mongoose,
+  Organisation,
+  Application,
+  ExecutionLogEvent,
+  Event
 }
 from &apos;@hoist/model&apos;;
 import {
@@ -81,7 +70,8 @@ import rimraf from &apos;rimraf&apos;;
 
 let rimrafAsync = Promise.promisify(rimraf);
 
-let fs = Promise.promisifyAll(require(&apos;fs-extra&apos;));
+import fs from &apos;fs-extra&apos;;
+Promise.promisifyAll(fs);
 let temp = Promise.promisifyAll(require(&apos;temp&apos;));
 let targz = Promise.promisifyAll(new Targz());
 let gitArchive = Promise.promisify(require(&apos;git-archive&apos;));
@@ -125,11 +115,23 @@ class Deployer {
       });
   }
   getAgenda() {
-    return this.agenda || (this.agenda = Promise.promisifyAll(new Agenda({
-      db: {
-        address: config.get(&apos;Hoist.mongo.core.connectionString&apos;)
-      }
-    })));
+    if (!this.agenda) {
+
+
+      this.agenda = Promise.resolve()
+        .then(() =&gt; {
+          return Promise.promisifyAll(new Agenda({
+            db: {
+              address: config.get(&apos;Hoist.mongo.core.connectionString&apos;)
+            }
+          }));
+        }).then((agenda) =&gt; {
+          return Promise.delay(500).then(() =&gt; {
+            return agenda;
+          });
+        });
+    }
+    return this.agenda;
   }
   deploy() {
     let deleteDeployDir = true;
@@ -314,10 +316,11 @@ class Deployer {
           process.stdout.write(&apos;#&apos;);
         }, 10);
         console.log(&apos;restoring npm cache&apos;);
-        return fs.copyAsync(this.getNpmCachePath(), path.join(this.getDeployPath(), &apos;node_modules&apos;)).finally(function () {
-          clearInterval(progress);
-          console.log(&apos;#\n&apos;);
-        });
+        return Promise.resolve(fs.copySync(this.getNpmCachePath(), path.join(this.getDeployPath(), &apos;node_modules&apos;)))
+          .finally(function () {
+            clearInterval(progress);
+            console.log(&apos;#\n&apos;);
+          });
       }
     });
   }
@@ -325,7 +328,7 @@ class Deployer {
     return Promise.try(() =&gt; {
         console.log(&apos;saving npm cache&apos;);
         if (fs.existsSync(this.getNpmCachePath())) {
-          return fs.removeAsync(this.getNpmCachePath());
+          fs.removeSync(this.getNpmCachePath());
         }
       })
       .then(() =&gt; {
@@ -337,7 +340,7 @@ class Deployer {
         return Promise.resolve()
           .then(() =&gt; {
             if (fs.existsSync(path.join(this.getDeployPath(), &apos;node_modules&apos;))) {
-              return fs.copyAsync(path.join(this.getDeployPath(), &apos;node_modules&apos;), this.getNpmCachePath(), {
+              fs.copySync(path.join(this.getDeployPath(), &apos;node_modules&apos;), this.getNpmCachePath(), {
                 clobber: true
               });
             }
@@ -415,21 +418,25 @@ class Deployer {
   }
   updateSchedules() {
     console.log(&apos;deleting existing schedules&apos;);
-    return this.getAgenda().cancelAsync({
-      &apos;data.application&apos;: this.application._id
+    return this.getAgenda().then((agenda) =&gt; {
+      return agenda.cancelAsync({
+        &apos;data.application&apos;: this.application._id
+      });
     }).then(() =&gt; {
       if (this.application.settings.live.schedules) {
-        return Promise.all(_.map(this.application.settings.live.schedules, (schedule, key) =&gt; {
-          var scheduleJob = Promise.promisifyAll(this.agenda.create(&apos;create:event2&apos;, {
-            application: this.application._id,
-            environment: &apos;live&apos;,
-            events: schedule.events
-          }));
-          scheduleJob.repeatEvery(key);
-          scheduleJob.computeNextRunAt();
-          console.log(&apos;adding schedule for &apos; + key);
-          return scheduleJob.saveAsync();
-        }, this));
+        return this.getAgenda().then((agenda) =&gt; {
+          return Promise.all(_.map(this.application.settings.live.schedules, (schedule, key) =&gt; {
+            var scheduleJob = Promise.promisifyAll(agenda.create(&apos;create:event2&apos;, {
+              application: this.application._id,
+              environment: &apos;live&apos;,
+              events: schedule.events
+            }));
+            scheduleJob.repeatEvery(key);
+            scheduleJob.computeNextRunAt();
+            console.log(&apos;adding schedule for &apos; + key);
+            return scheduleJob.saveAsync();
+          }, this));
+        });
       }
     });
   }
@@ -445,7 +452,10 @@ class Deployer {
         var directoriesToDelete = _.dropRight(directories, 3);
 
         return Promise.all(_.map(directoriesToDelete, (dir) =&gt; {
-          return fs.removeAsync(path.join(this.deployRoot, dir));
+          return Promise.resolve()
+            .then(() =&gt; {
+              fs.removeSync(path.join(this.deployRoot, dir));
+            });
         }));
       });
   }
@@ -458,12 +468,12 @@ class Deployer {
           if ((!stat.isSymbolicLink()) &amp;&amp; stat.isDirectory()) {
             return rimrafAsync(this.getSymlinkPathPath());
           } else {
-            return fs.unlinkAsync(this.getSymlinkPathPath());
+            fs.unlinkSync(this.getSymlinkPathPath());
           }
         }
       })
       .then(() =&gt; {
-        return fs.symlinkAsync(this.getDeployPath(), this.getSymlinkPathPath());
+        fs.symlinkSync(this.getDeployPath(), this.getSymlinkPathPath());
       });
   }
 
@@ -471,10 +481,11 @@ class Deployer {
 
 module.exports = Deployer;
 </code></pre>
+
 </div>
 
 <footer class="footer">
-  Generated by <a href="https://esdoc.org">ESDoc<span data-ice="esdocVersion">(0.1.4)</span></a>
+  Generated by <a href="https://esdoc.org">ESDoc<span data-ice="esdocVersion">(0.4.6)</span></a>
 </footer>
 
 <script src="script/search_index.js"></script>
