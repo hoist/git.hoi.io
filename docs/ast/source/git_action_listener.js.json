@@ -13326,7 +13326,10 @@
           "line": 162,
           "column": 1
         }
-      }
+      },
+      "name": "_",
+      "leadingComments": [],
+      "trailingComments": []
     },
     {
       "type": "Identifier",
@@ -13361,7 +13364,10 @@
           "line": 166,
           "column": 33
         }
-      }
+      },
+      "name": "_",
+      "leadingComments": [],
+      "trailingComments": []
     },
     {
       "type": "ExportDefaultDeclaration",
@@ -25839,55 +25845,6 @@
         }
       },
       "leadingComments": null
-    },
-    {
-      "type": "ExportDefaultDeclaration",
-      "declaration": {
-        "type": "VariableDeclaration",
-        "kind": "let",
-        "loc": {
-          "start": {
-            "line": 166,
-            "column": 0
-          },
-          "end": {
-            "line": 166,
-            "column": 33
-          }
-        },
-        "declarations": [
-          {
-            "type": "VariableDeclarator",
-            "id": {
-              "type": "Identifier",
-              "name": "gitActionListener"
-            },
-            "init": {
-              "type": "NewExpression",
-              "callee": {
-                "type": "Identifier",
-                "name": "GitActionListener"
-              }
-            }
-          }
-        ],
-        "leadingComments": [],
-        "trailingComments": []
-      },
-      "range": [
-        4873,
-        4906
-      ],
-      "loc": {
-        "start": {
-          "line": 166,
-          "column": 0
-        },
-        "end": {
-          "line": 166,
-          "column": 33
-        }
-      }
     }
   ],
   "sourceType": "module",
